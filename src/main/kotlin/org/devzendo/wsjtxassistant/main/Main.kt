@@ -1,0 +1,85 @@
+package org.devzendo.wsjtxassistant.main
+
+import org.devzendo.commonapp.gui.Beautifier
+import org.devzendo.commonapp.gui.DefaultCursorManager
+import org.devzendo.commonapp.gui.GUIUtils
+import org.devzendo.commonapp.gui.ThreadCheckingRepaintManager
+import org.devzendo.commoncode.logging.Logging
+import org.slf4j.LoggerFactory
+import org.devzendo.commonapp.gui.WindowGeometryStorePersistence
+import org.devzendo.commonapp.prefs.DefaultPrefsLocation
+import org.devzendo.commonapp.prefs.PrefsLocation
+import org.devzendo.wsjtxassistant.prefs.DefaultAssistantPrefs
+import org.devzendo.wsjtxassistant.prefs.Prefs
+import org.devzendo.wsjtxassistant.prefs.PrefsFactory
+import org.devzendo.wsjtxassistant.prefs.PrefsStartupHelper
+import org.slf4j.bridge.SLF4JBridgeHandler
+import java.io.File
+
+
+/**
+ * Copyright (C) 2008-2017 Matt Gumbley, DevZendo.org http://devzendo.org
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// Just for the logger
+class Main {}
+
+fun main(args: Array<String>) {
+    val logger = LoggerFactory.getLogger(Main::class.java)
+
+    SLF4JBridgeHandler.install()
+    val logging = Logging.getInstance()
+    val finalArgList = logging.setupLoggingFromArgs(args.toMutableList())
+
+    logger.info("Starting WSJTX Assistant")
+
+    ThreadCheckingRepaintManager.initialise()
+
+    //val wsjtxTailer = WSJTXTailer()
+    val prefsFactory = PrefsFactory(".wsjtxassistant", "wsjtxassistant.ini")
+
+    // Sun changed their recommendations and now recommends the UI be built
+    // on the EDT, so I think flagging creation on non-EDT is OK.
+    // "We used to say that you could create the GUI on the main thread as
+    // long as you didn't modify components that had already been realized.
+    // While this worked for most applications, in certain situations it
+    // could cause problems."
+    // http://java.sun.com/docs/books/tutorial/uiswing/misc/threads.html
+    // So let's create it on the EDT anyway
+    //
+    GUIUtils.runOnEventThread {
+        try {
+            // Process command line
+            for (i in finalArgList.indices) {
+                logger.debug("arg " + i + " = " + finalArgList[i] + "'")
+            }
+
+            Beautifier.makeBeautiful()
+
+            val cursorManager = DefaultCursorManager()
+
+            val prefsStartupHelper = PrefsStartupHelper(prefsFactory) { DefaultAssistantPrefs(it) }
+
+            val prefs = prefsStartupHelper.initialisePrefs()
+            logger.info("the prefs object is " + prefs)
+
+        } catch (e: Exception) {
+            logger.error(e.message)
+            System.exit(1)
+        }
+    }
+
+    logger.info("Terminating")
+}
