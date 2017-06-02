@@ -6,15 +6,10 @@ import org.devzendo.commonapp.gui.GUIUtils
 import org.devzendo.commonapp.gui.ThreadCheckingRepaintManager
 import org.devzendo.commoncode.logging.Logging
 import org.slf4j.LoggerFactory
-import org.devzendo.commonapp.gui.WindowGeometryStorePersistence
-import org.devzendo.commonapp.prefs.DefaultPrefsLocation
-import org.devzendo.commonapp.prefs.PrefsLocation
 import org.devzendo.wsjtxassistant.prefs.DefaultAssistantPrefs
-import org.devzendo.wsjtxassistant.prefs.Prefs
 import org.devzendo.wsjtxassistant.prefs.PrefsFactory
 import org.devzendo.wsjtxassistant.prefs.PrefsStartupHelper
 import org.slf4j.bridge.SLF4JBridgeHandler
-import java.io.File
 
 
 /**

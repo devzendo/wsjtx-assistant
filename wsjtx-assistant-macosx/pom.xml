@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.devzendo</groupId>
+    <artifactId>wsjtx-assistant-macosx</artifactId>
+
+    <parent>
+        <artifactId>wsjtx-assistant</artifactId>
+        <groupId>org.devzendo</groupId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <properties>
+        <main.class>org.devzendo.wsjtxassistant.main.MainKt</main.class>
+        <appName>WSJTX-Assistant</appName>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.devzendo</groupId>
+                <artifactId>cross-platform-launcher-plugin</artifactId>
+                <version>1.1.0-SNAPSHOT</version>
+                <configuration>
+                    <os>MacOSX</os>
+                    <applicationName>${appName}</applicationName>
+                    <mainClassName>org.devzendo.wsjtxassistant.main.MainKt</mainClassName>
+                    <iconsFileName>WSJTXAssistant.icns</iconsFileName>
+                    <!--
+                      I don't have an assigned creator code
+                      <bundleSignature>BM</bundleSignature>
+                    -->
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>createlauncher</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>createlauncher</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!--
+              Copy the Quaqua native libraries into the correct location in the
+              Mac OS X launcher structure created above.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>unpack-quaqua-dependencies</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>unpack</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <!-- Quaqua is depended on in the macosx project -->
+                                <artifactItem>
+                                    <groupId>org.devzendo</groupId>
+                                    <artifactId>LibQuaqua</artifactId>
+                                    <version>7.3.4</version>
+                                    <type>zip</type>
+                                    <overWrite>true</overWrite>
+                                    <includes>*</includes>
+                                    <outputDirectory>
+                                        ${project.build.directory}/macosx/${appName}.app/Contents/Resources/Java/lib
+                                    </outputDirectory>
+                                </artifactItem>
+                            </artifactItems>
+                            <!-- other configurations here -->
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+        </plugins>
+    </build>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.devzendo</groupId>
+            <artifactId>wsjtx-assistant-code</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+    </dependencies>
+</project>
