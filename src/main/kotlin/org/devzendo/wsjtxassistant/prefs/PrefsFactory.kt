@@ -33,7 +33,7 @@ class PrefsFactory(homeDir: File, prefsSubDir: String, prefsFile: String) {
     constructor(prefsSubDir: String, prefsFile: String) : this(File(System.getProperty("user.home")), prefsSubDir, prefsFile) {}
 
     fun prefsDirectoryExists(): Boolean {
-        return prefsDir.exists()
+        return prefsDir.exists() && prefsDir.isDirectory
     }
 
     fun createPrefsDirectory(): Boolean {
