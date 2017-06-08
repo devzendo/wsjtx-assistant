@@ -1,15 +1,20 @@
 package org.devzendo.wsjtxassistant.main
 
-import org.devzendo.commonapp.gui.Beautifier
-import org.devzendo.commonapp.gui.DefaultCursorManager
-import org.devzendo.commonapp.gui.GUIUtils
-import org.devzendo.commonapp.gui.ThreadCheckingRepaintManager
+import org.devzendo.commonapp.gui.*
+import org.devzendo.commonapp.gui.GUIUtils.runOnEventThread
+import org.devzendo.commonapp.gui.menu.MenuWiring
 import org.devzendo.commoncode.logging.Logging
+import org.devzendo.wsjtxassistant.gui.*
+import org.devzendo.wsjtxassistant.prefs.AssistantPrefs
 import org.slf4j.LoggerFactory
 import org.devzendo.wsjtxassistant.prefs.DefaultAssistantPrefs
 import org.devzendo.wsjtxassistant.prefs.PrefsFactory
 import org.devzendo.wsjtxassistant.prefs.PrefsStartupHelper
 import org.slf4j.bridge.SLF4JBridgeHandler
+import java.awt.AWTEvent
+import java.awt.Toolkit
+import java.awt.event.WindowAdapter
+import java.awt.event.WindowEvent
 
 
 /**
@@ -54,7 +59,7 @@ fun main(args: Array<String>) {
     // http://java.sun.com/docs/books/tutorial/uiswing/misc/threads.html
     // So let's create it on the EDT anyway
     //
-    GUIUtils.runOnEventThread {
+    runOnEventThread {
         try {
             // Process command line
             for (i in finalArgList.indices) {
@@ -67,8 +72,45 @@ fun main(args: Array<String>) {
 
             val prefsStartupHelper = PrefsStartupHelper(prefsFactory) { DefaultAssistantPrefs(it) }
 
-            val prefs = prefsStartupHelper.initialisePrefs()
-            logger.info("the prefs object is " + prefs)
+            val prefs: AssistantPrefs = prefsStartupHelper.initialisePrefs()
+
+            class DefaultWindowGeometryStorePersistence: WindowGeometryStorePersistence {
+                override fun getWindowGeometry(windowName: String): String {
+                    return prefs.getWindowGeometry(windowName)
+                }
+
+                override fun setWindowGeometry(windowName: String, geometry: String) {
+                    prefs.setWindowGeometry(windowName, geometry)
+                }
+
+            }
+            val windowPersistence = DefaultWindowGeometryStorePersistence()
+            val windowGeometryStore = WindowGeometryStore(windowPersistence)
+            val menuWiring = MenuWiring()
+            val mainPanel = AssistantMainPanel()
+            val mainFrame = AssistantMainFrame(windowGeometryStore, menuWiring, mainPanel)
+            cursorManager.setMainFrame(mainFrame)
+            // this is triggered when the window has actually closed (after this was invoked via menu and the shutdown
+            // has run) - NOT when close is requested.
+            mainFrame.addWindowListener(object: WindowAdapter() {
+                override fun windowClosed(e: WindowEvent) {
+                    logger.info("Detected window closed")
+                    System.exit(0)
+                }})
+
+            val fileMenu = FileMenu(menuWiring)
+            val menu = MenuImpl(menuWiring, fileMenu)
+            mainFrame.setJMenuBar(menu.menuBar)
+
+            val closeAL = MainFrameCloseActionListener(windowGeometryStore, mainFrame, cursorManager)
+            menuWiring.setActionListener(AssistantMenuIdentifiers.FILE_EXIT, closeAL)
+
+            // also handles the OSX close window red dot, by triggering file/exit
+            val startupListener = StartupAWTEventListener(mainFrame, cursorManager, menuWiring)
+            Toolkit.getDefaultToolkit().addAWTEventListener(startupListener, AWTEvent.WINDOW_EVENT_MASK)
+
+            mainFrame.setVisible(true)
+
 
         } catch (e: Exception) {
             logger.error(e.message)
@@ -76,5 +118,5 @@ fun main(args: Array<String>) {
         }
     }
 
-    logger.info("Terminating")
+    logger.debug("End of main thread")
 }

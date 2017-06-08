@@ -32,7 +32,7 @@ import javax.swing.JOptionPane
  * *
  * @param prefsInstantiator the instantiator of prefs
  */
-class PrefsStartupHelper(val prefsFactory: PrefsFactory, val prefsInstantiator: (File) -> Prefs) {
+class PrefsStartupHelper(val prefsFactory: PrefsFactory, val prefsInstantiator: (File) -> AssistantPrefs) {
     val logger = LoggerFactory.getLogger(PrefsStartupHelper::class.java)
 
     /**
@@ -59,7 +59,7 @@ class PrefsStartupHelper(val prefsFactory: PrefsFactory, val prefsInstantiator: 
      * Initialise the prefs. If this fails, the user wil be notified, and the
      * program will exit. You can't continue without prefs.
      */
-    fun initialisePrefs(): Prefs {
+    fun initialisePrefs(): AssistantPrefs {
         logger.debug("Prefs directory is " + prefsFactory.prefsDir.absolutePath)
         logger.debug("Prefs file is " + prefsFactory.prefsFile.absolutePath)
         if (!prefsFactory.prefsDirectoryExists()) {
