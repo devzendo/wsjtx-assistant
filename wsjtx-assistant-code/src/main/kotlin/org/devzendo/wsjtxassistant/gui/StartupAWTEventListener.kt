@@ -26,7 +26,8 @@ import javax.swing.JFrame
  */
 class StartupAWTEventListener(val mainFrame: JFrame,
                               val cursorManager: CursorManager,
-                              val menuWiring: MenuWiring): AWTEventListener {
+                              val menuWiring: MenuWiring,
+                              val startRunnable: Runnable): AWTEventListener {
     val logger = LoggerFactory.getLogger(StartupAWTEventListener::class.java)
 
     override fun eventDispatched(event: AWTEvent) {
@@ -47,7 +48,7 @@ class StartupAWTEventListener(val mainFrame: JFrame,
             override fun construct(): Object {
                 Thread.currentThread().setName("App Startup")
                 logger.info("App startup...")
-                // start tailing thread,
+                startRunnable.run();
                 logger.info("...end of app startup")
                 return Object()
             }

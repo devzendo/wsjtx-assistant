@@ -106,7 +106,7 @@ fun main(args: Array<String>) {
             menuWiring.setActionListener(AssistantMenuIdentifiers.FILE_EXIT, closeAL)
 
             // also handles the OSX close window red dot, by triggering file/exit
-            val startupListener = StartupAWTEventListener(mainFrame, cursorManager, menuWiring)
+            val startupListener = StartupAWTEventListener(mainFrame, cursorManager, menuWiring, Runnable { })
             Toolkit.getDefaultToolkit().addAWTEventListener(startupListener, AWTEvent.WINDOW_EVENT_MASK)
 
             mainFrame.setVisible(true)
