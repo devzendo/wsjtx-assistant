@@ -66,17 +66,20 @@ class TestLoadFiles: ConsoleLoggingUnittestCase() {
         parser.use {
             val file = parser.file()
             assertThat(file, not(equalTo(defaultLogFile())))
+            val dxCallsigns = mutableListOf<Callsign>()
             val callsigns = mutableListOf<Callsign>()
             val grids = mutableListOf<Grid>()
             parser.parseForBand(Band.BAND_20M, { logEntry ->
                 run {
                     callsigns.add(logEntry.callsign)
+                    dxCallsigns.add(logEntry.dxCallsign)
                     grids.add(logEntry.grid)
                 }
             })
             assertThat(callsigns, hasSize(4))
             assertThat(grids, hasSize(4))
             assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG", "AE4DR", "RN6MG"))
+            assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO", "SP7EOY", "KW4PL"))
             assertThat(grids, Matchers.contains("KN12", "EM82", "EM85", "LN08"))
         }
     }

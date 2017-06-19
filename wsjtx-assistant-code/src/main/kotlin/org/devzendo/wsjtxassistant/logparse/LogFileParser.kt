@@ -52,7 +52,7 @@ typealias Grid = String
 enum class Band { BAND_2200M, BAND_630M, BAND_160M, BAND_80M, BAND_60M, BAND_40M, BAND_30M, BAND_20M, BAND_17M,
     BAND_15M, BAND_12M, BAND_10M, BAND_6M, BAND_4M, BAND_2M }
 data class LogEntry(val date: LocalDateTime, val power: Power, val offset: Offset, val mode: Mode,
-                    val callsign: Callsign, val grid: Grid)
+                    val callsign: Callsign, val dxCallsign: Callsign, val grid: Grid)
 
 // 2015-Apr-15 20:13  14.076 MHz  JT9
 private val DATE_CHANGE_REGEX = "^(\\d{4}-\\S{3}-\\d{2}) \\d{2}:\\d{2}\\s+(\\d+\\.\\d+) MHz\\s+\\S+\\s*$".toRegex()
@@ -81,7 +81,8 @@ private fun initialiseDateChangeFormatter(): DateTimeFormatter {
 }
 
 // 0001  -8  0.2  560 # KC0EFQ WA3ETR FN10
-private val REPORT_REGEX = "^(\\d{4})\\s+(-\\d+)\\s+[-\\d.]+\\s+(\\d+)\\s([#@])\\s\\w+\\s+(\\w+)\\s+([A-Z]{2}\\d{2})\\s*$".toRegex()
+//                            0001        -8         0.2         560      @#      KC0EFQ    WA3ETR     FN10
+private val REPORT_REGEX = "^(\\d{4})\\s+(-\\d+)\\s+[-\\d.]+\\s+(\\d+)\\s([#@])\\s(\\w+)\\s+(\\w+)\\s+([A-Z]{2}\\d{2})\\s*$".toRegex()
 private var TIME_FORMATTER = initialiseTimeFormatter()
 private fun initialiseTimeFormatter(): DateTimeFormatter {
     return DateTimeFormatterBuilder()
@@ -191,8 +192,9 @@ class LogFileParser(val logFile: Path = defaultLogFile()): Closeable {
                 val cpower = groups[2]!!.value
                 val coffset = groups[3]!!.value
                 val cmode = groups[4]!!.value
-                val ccallsign = groups[5]!!.value
-                val cgrid = groups[6]!!.value
+                val cdxcallsign = groups[5]!!.value // could be CQ
+                val ccallsign = groups[6]!!.value
+                val cgrid = groups[7]!!.value
                 // callsigns must have at least one digit.
                 if (ccallsign.contains("\\d".toRegex())) {
                     if (currentDate != null && band == currentBand) {
@@ -203,6 +205,7 @@ class LogFileParser(val logFile: Path = defaultLogFile()): Closeable {
                                 coffset.toInt(),
                                 if (cmode == "@") Mode.JT9 else Mode.JT65,
                                 ccallsign,
+                                cdxcallsign,
                                 cgrid)
                         logger.debug(logEntry.toString())
                         callback(logEntry)
