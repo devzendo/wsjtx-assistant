@@ -94,12 +94,8 @@ private fun initialiseTimeFormatter(): DateTimeFormatter {
 }
 private val FREQ_TO_BAND = HashMap<String, Band>()
 
-class LogFileParser(val logFile: Path = defaultLogFile()): Closeable {
+class LogFileParser(val logFile: Path = defaultLogFile()) {
     val logger = LoggerFactory.getLogger(LogFileParser::class.java)
-
-    override fun close() {
-
-    }
 
     init {
         if (!Files.exists(logFile) || !Files.isRegularFile(logFile)) {
@@ -142,7 +138,6 @@ class LogFileParser(val logFile: Path = defaultLogFile()): Closeable {
         FREQ_TO_BAND.put("0.13613", Band.BAND_2200M)
     }
 
-
     companion object LogFileParser {
         fun defaultLogFile(): Path {
             when (OSTypeDetect.getInstance().osType) {
@@ -158,7 +153,6 @@ class LogFileParser(val logFile: Path = defaultLogFile()): Closeable {
             }
         }
     }
-
 
     fun file(): Path = logFile
     fun parseForBand(band: Band, callback: (logEntry: LogEntry) -> Unit) {
@@ -259,66 +253,22 @@ class LogFileParser(val logFile: Path = defaultLogFile()): Closeable {
             val tailer = Tailer(file().toFile(), listener, 250)
             init {
                 val tailThread = Thread({
+                    logger.debug("Start of tailer thread")
                     tailer.run()
+                    logger.debug("End of tailer thread")
                 })
                 tailThread.name = "Tailer reader"
                 tailThread.setDaemon(true)
                 tailThread.start()
+                logger.debug("Starting tailer thread")
             }
 
             override fun close() {
+                logger.debug("Stopping tailer")
                 tailer.stop()
             }
 
         }
         return CloseableTailer(band, callback)
     }
-
-/*
-
-        local *F;
-        unless (open F, "<$file") {
-            die "Cannot open $file: $!\n";
-        }
-        my $currentBand = undef;
-        my $currentDate = undef;
-        while (<F>) {
-            chomp;
-            #print "line [$_]\n";
-            # Only interested in data from a specific band, and the indicator for changing band/mode looks like:
-            # 2015-Apr-15 20:13  14.076 MHz  JT9
-            # So extract the frequency, and look up the band. This also gives us the date. Records like this are always
-            # written at startup, mode change, and at midnight.
-            if (/^(\d{4}-\S{3}-\d{2}) \d{2}:\d{2}\s+(\d+\.\d+) MHz\s+\S+\s*$/) {
-                $currentDate = $1;
-                my $frequency = $2;
-                $currentBand = $freqToBand{$frequency};
-                #print "data being received for $currentBand (filtering on $bandOfInterest)\n";
-                next;
-            }
-            # Time/Power/Freq offset/Mode/Call/Square can be extracted from records like these:
-            # 0000  -9  1.5 1259 # CQ TI4DJ EK70
-            # 0001  -1  0.5  404 # DX K1RI FN41
-            # 0001  -8  0.2  560 # KC0EFQ WA3ETR FN10
-            # 0001 -15  0.1  628 # KK7X K8MDA EN80
-            # 0002 -13  1.1 1322 # CQ YV5FRD FK60
-            # 0003  -3  0.5 1002 # TF2MSN K1RI FN41
-            if (/^(\d{4})\s+(-\d+)\s+[-\d.]+\s+(\d+)\s([#@])\s\w+\s+(\w+)\s+([A-Z]{2}\d{2})\s*$/) {
-                my $ctime = $1;
-                my $cpower = $2;
-                my $coffset = $3;
-                my $cmode = $4;
-                my $ccallsign = $5;
-                my $cgrid = $6;
-                # callsigns must have at least one digit.
-                next unless ($ccallsign =~ /\d/);
-                if (defined $currentDate && $bandOfInterest eq $currentBand) {
-                    $callback->($currentDate, $ctime, $cpower, $coffset, $cmode, $ccallsign, $cgrid);
-                }
-                next;
-            }
-        }
-        close F;
-
- */
 }

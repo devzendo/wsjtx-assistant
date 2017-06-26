@@ -59,10 +59,8 @@ class TestLoadFiles: ConsoleLoggingUnittestCase() {
     @Test
     fun defaultConstructorScansDefaultPathIfNotGivenAPath() {
         val parser = LogFileParser()
-        parser.use {
-            val file = parser.file()
-            assertThat(file, equalTo(defaultLogFile()))
-        }
+        val file = parser.file()
+        assertThat(file, equalTo(defaultLogFile()))
     }
 
     @Test
@@ -74,25 +72,23 @@ class TestLoadFiles: ConsoleLoggingUnittestCase() {
     @Test
     fun specificExistingFileCanBeParsed() {
         val parser = LogFileParser(TEST_FILE)
-        parser.use {
-            val file = parser.file()
-            assertThat(file, not(equalTo(defaultLogFile())))
-            val dxCallsigns = mutableListOf<Callsign>()
-            val callsigns = mutableListOf<Callsign>()
-            val grids = mutableListOf<Grid>()
-            parser.parseForBand(Band.BAND_20M, { logEntry ->
-                run {
-                    callsigns.add(logEntry.callsign)
-                    dxCallsigns.add(logEntry.dxCallsign)
-                    grids.add(logEntry.grid)
-                }
-            })
-            assertThat(callsigns, hasSize(4))
-            assertThat(grids, hasSize(4))
-            assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG", "AE4DR", "RN6MG"))
-            assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO", "SP7EOY", "KW4PL"))
-            assertThat(grids, Matchers.contains("KN12", "EM82", "EM85", "LN08"))
-        }
+        val file = parser.file()
+        assertThat(file, not(equalTo(defaultLogFile())))
+        val dxCallsigns = mutableListOf<Callsign>()
+        val callsigns = mutableListOf<Callsign>()
+        val grids = mutableListOf<Grid>()
+        parser.parseForBand(Band.BAND_20M, { logEntry ->
+            run {
+                callsigns.add(logEntry.callsign)
+                dxCallsigns.add(logEntry.dxCallsign)
+                grids.add(logEntry.grid)
+            }
+        })
+        assertThat(callsigns, hasSize(4))
+        assertThat(grids, hasSize(4))
+        assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG", "AE4DR", "RN6MG"))
+        assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO", "SP7EOY", "KW4PL"))
+        assertThat(grids, Matchers.contains("KN12", "EM82", "EM85", "LN08"))
     }
 
     @Test
@@ -105,72 +101,74 @@ class TestLoadFiles: ConsoleLoggingUnittestCase() {
 
         val parser = LogFileParser(logFile.toPath())
         logger.info("got parser")
-        parser.use {
-            val dxCallsigns = mutableListOf<Callsign>()
-            val callsigns = mutableListOf<Callsign>()
-            val grids = mutableListOf<Grid>()
+        val dxCallsigns = mutableListOf<Callsign>()
+        val callsigns = mutableListOf<Callsign>()
+        val grids = mutableListOf<Grid>()
 
-            fun assertIsEmpty() {
+        fun assertIsEmpty() {
+            ThreadUtils.waitNoInterruption(250)
+            assertThat(callsigns, hasSize(0))
+            assertThat(dxCallsigns, hasSize(0))
+            assertThat(grids, hasSize(0))
+        }
+
+        logger.info("creating tailer")
+        val tailer = parser.tailForBand(Band.BAND_20M, { logEntry ->
+            run {
+                logger.info("called back with callsign " + logEntry.callsign + " dx callsign " + logEntry.dxCallsign)
+                callsigns.add(logEntry.callsign)
+                dxCallsigns.add(logEntry.dxCallsign)
+                grids.add(logEntry.grid)
+            }
+        })
+        logger.info("created tailer")
+        tailer.use {
+            // returns immediately, calls back when new data comes in
+            assertIsEmpty()
+
+            // append to log file
+            val fw = FileWriter(logFile.absolutePath, true)
+            val bw = BufferedWriter(fw)
+
+            fun flushLine(line: String) {
+                logger.info("appending line " + line)
+                bw.appendln(line)
+                bw.flush()
                 ThreadUtils.waitNoInterruption(250)
-                assertThat(callsigns, hasSize(0))
-                assertThat(dxCallsigns, hasSize(0))
-                assertThat(grids, hasSize(0))
             }
 
-            logger.info("creating tailer")
-            val tailer = parser.tailForBand(Band.BAND_20M, { logEntry ->
-                run {
-                    logger.info("called back with callsign " + logEntry.callsign + " dx callsign " + logEntry.dxCallsign)
-                    callsigns.add(logEntry.callsign)
-                    dxCallsigns.add(logEntry.dxCallsign)
-                    grids.add(logEntry.grid)
-                }
-            })
-            logger.info("created tailer")
-            tailer.use {
-                // returns immediately, calls back when new data comes in
+            logger.info("writing to log file")
+            bw.use {
+
+                // append a transmission for 20m. There has been no date change yet, so it won't be called back to us.
+                flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
                 assertIsEmpty()
 
-                // append to log file
-                val fw = FileWriter(logFile.absolutePath, true)
-                val bw = BufferedWriter(fw)
-                logger.info("writing to log file")
-                bw.use {
-                    fun flushLine(line: String) {
-                        logger.info("appending line " + line)
-                        bw.appendln(line)
-                        bw.flush()
-                        ThreadUtils.waitNoInterruption(250)
-                    }
+                // append a date change. no callback, but next transmission will be.
+                flushLine("2016-May-13 20:32  14.078 MHz  JT9")
+                assertIsEmpty()
 
-                    // append a transmission for 20m. There has been no date change yet, so it won't be called back to us.
-                    flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
-                    assertIsEmpty()
+                // transmit, receive callback
+                flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
+                assertThat(callsigns, Matchers.contains("LZ1UBO"))
+                assertThat(dxCallsigns, Matchers.contains("CQ"))
+                assertThat(grids, Matchers.contains("KN12"))
 
-                    // append a date change. no callback, but next transmission will be.
-                    flushLine("2016-May-13 20:32  14.078 MHz  JT9")
-                    assertIsEmpty()
+                // other line added but doesn't match our pattern, no change
+                flushLine("2032 -15 -0.3 1007 @ KW4PL 9H1KR 73")
+                assertThat(callsigns, Matchers.contains("LZ1UBO"))
+                assertThat(dxCallsigns, Matchers.contains("CQ"))
+                assertThat(grids, Matchers.contains("KN12"))
 
-                    // transmit, receive
-                    flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
-                    assertThat(callsigns, Matchers.contains("LZ1UBO"))
-                    assertThat(dxCallsigns, Matchers.contains("CQ"))
-                    assertThat(grids, Matchers.contains("KN12"))
-
-                    // other line added but doesn't match our pattern, no change
-                    flushLine("2032 -15 -0.3 1007 @ KW4PL 9H1KR 73")
-                    assertThat(callsigns, Matchers.contains("LZ1UBO"))
-                    assertThat(dxCallsigns, Matchers.contains("CQ"))
-                    assertThat(grids, Matchers.contains("KN12"))
-
-                    // next transmission
-                    flushLine("2033 -15 -0.4  838 @ LZ1UBO WA4RG EM82")
-                    assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG"))
-                    assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO"))
-                    assertThat(grids, Matchers.contains("KN12", "EM82"))
-                }
+                // next transmission
+                flushLine("2033 -15 -0.4  838 @ LZ1UBO WA4RG EM82")
+                assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG"))
+                assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO"))
+                assertThat(grids, Matchers.contains("KN12", "EM82"))
             }
-            logger.info("end of test")
         }
+        logger.info("end of test")
+        // wait to see if the thread stops
+        ThreadUtils.waitNoInterruption(500)
     }
 }
