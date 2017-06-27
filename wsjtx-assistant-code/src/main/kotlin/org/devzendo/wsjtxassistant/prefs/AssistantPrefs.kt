@@ -1,5 +1,7 @@
 package org.devzendo.wsjtxassistant.prefs
 
+import org.devzendo.wsjtxassistant.logparse.Band
+
 /**
  * Copyright (C) 2008-2017 Matt Gumbley, DevZendo.org http://devzendo.org
  *
@@ -19,4 +21,6 @@ interface AssistantPrefs: Prefs {
     fun getWindowGeometry(windowName: String): String
     fun setWindowGeometry(windowName: String, geometry: String)
 
+    fun getBand(): Band
+    fun setBand(band: Band)
 }

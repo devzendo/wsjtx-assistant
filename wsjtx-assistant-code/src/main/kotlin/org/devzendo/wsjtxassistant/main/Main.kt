@@ -82,12 +82,12 @@ fun main(args: Array<String>) {
                 override fun setWindowGeometry(windowName: String, geometry: String) {
                     prefs.setWindowGeometry(windowName, geometry)
                 }
-
             }
+
             val windowPersistence = DefaultWindowGeometryStorePersistence()
             val windowGeometryStore = WindowGeometryStore(windowPersistence)
             val menuWiring = MenuWiring()
-            val mainPanel = AssistantMainPanel()
+            val mainPanel = AssistantMainPanel({ prefs.getBand() }, { prefs.setBand(it) })
             val mainFrame = AssistantMainFrame(windowGeometryStore, menuWiring, mainPanel)
             cursorManager.setMainFrame(mainFrame)
             // this is triggered when the window has actually closed (after this was invoked via menu and the shutdown

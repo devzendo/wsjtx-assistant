@@ -1,6 +1,7 @@
 package org.devzendo.wsjtxassistant.prefs
 
 import org.devzendo.commoncode.file.INIFile
+import org.devzendo.wsjtxassistant.logparse.Band
 import org.slf4j.LoggerFactory
 import java.io.File
 
@@ -28,6 +29,9 @@ class DefaultAssistantPrefs(prefsFile: File): AssistantPrefs
     private val SECTION_UI = "ui"
     private val UI_GEOMETRY = "geometry"
 
+    private val SECTION_ASSISTANT = "assistant"
+    private val ASSISTANT_BAND = "band"
+
     val iniFile = INIFile(prefsFile.absolutePath)
     init {
         logger.debug("Preferences are stored at " + prefsFile)
@@ -45,4 +49,15 @@ class DefaultAssistantPrefs(prefsFile: File): AssistantPrefs
         return UI_GEOMETRY + "_" + windowName
     }
 
+    override fun getBand(): Band {
+        val bandStr = iniFile.getValue(SECTION_ASSISTANT, ASSISTANT_BAND)
+        val returnedBand = if (bandStr != null) Band.valueOf(bandStr) else Band.BAND_20M
+        logger.info("Request for stored band returning " + returnedBand)
+        return returnedBand
+    }
+
+    override fun setBand(band: Band) {
+        logger.info("Setting the stored band to " + band)
+        iniFile.setValue(SECTION_ASSISTANT, ASSISTANT_BAND, band.toString())
+    }
 }

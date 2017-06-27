@@ -1,13 +1,14 @@
 package org.devzendo.wsjtxassistant.gui
 
+import org.devzendo.commonapp.gui.GUIUtils.runOnEventThread
 import org.devzendo.wsjtxassistant.data.CallsignState
+import org.devzendo.wsjtxassistant.logparse.Band
+import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
+import java.awt.Dimension
 import java.awt.event.ActionEvent
 import java.awt.event.ActionListener
-import java.util.*
 import javax.swing.*
-import org.devzendo.commonapp.gui.GUIUtils.runOnEventThread
-import java.awt.Dimension
 import javax.swing.event.ListSelectionEvent
 import javax.swing.event.ListSelectionListener
 
@@ -28,7 +29,9 @@ import javax.swing.event.ListSelectionListener
  * limitations under the License.
  */
 
-class AssistantMainPanel: JPanel(), ActionListener, ListSelectionListener {
+class AssistantMainPanel(val getBand: () -> Band, val setBand: (band: Band)-> Unit): JPanel(), ActionListener, ListSelectionListener {
+    val logger = LoggerFactory.getLogger(AssistantMainPanel::class.java)
+
     val callsignModel = DefaultListModel<String>()
     val callsignList = JList(callsignModel)
     val storeButton = JButton("Store")
@@ -42,6 +45,19 @@ class AssistantMainPanel: JPanel(), ActionListener, ListSelectionListener {
         val qslViaEQSLRadio = JRadioButton("QSL via eQSL.cc")
 
         setLayout(BorderLayout())
+
+        val bandSelector = JComboBox<Band>(Band.values())
+        bandSelector.selectedItem = getBand()
+        bandSelector.addActionListener {
+            val selectedItem = bandSelector.selectedItem
+            logger.info("Band selected item is of type " + selectedItem.javaClass.simpleName)
+            val selection: Band = selectedItem as Band
+            logger.info("Band selection changed to " + selection)
+            setBand(selection)
+            // need to pass the selection on to the listeners (the tailer)
+        }
+        add(bandSelector, BorderLayout.NORTH)
+
         callsignList.visibleRowCount = 10
         callsignList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
         val listScroller = JScrollPane(callsignList)
