@@ -3,7 +3,6 @@ package org.devzendo.wsjtxassistant.logparse
 import org.devzendo.commoncode.concurrency.ThreadUtils
 import org.devzendo.wsjtxassistant.logging.ConsoleLoggingUnittestCase
 import org.devzendo.wsjtxassistant.logparse.LogFileParser.LogFileParser.defaultLogFile
-import org.hamcrest.MatcherAssert
 import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers
 import org.hamcrest.Matchers.*
@@ -16,7 +15,6 @@ import java.io.BufferedWriter
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileWriter
-import java.nio.file.Files
 import java.nio.file.Files.exists
 import java.nio.file.Files.isRegularFile
 import java.nio.file.Paths
@@ -39,8 +37,8 @@ private val TEST_FILE = Paths.get("src/test/resources/test-all.txt")
  * limitations under the License.
  */
 
-class TestLoadFiles: ConsoleLoggingUnittestCase() {
-    val logger = LoggerFactory.getLogger(TestLoadFiles::class.java)
+class TestLogFileParser : ConsoleLoggingUnittestCase() {
+    val logger = LoggerFactory.getLogger(TestLogFileParser::class.java)
 
     @get:Rule
     var thrown = ExpectedException.none()
