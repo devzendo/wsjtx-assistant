@@ -20,7 +20,4 @@ import org.devzendo.wsjtxassistant.logparse.Band
 interface AssistantPrefs: Prefs {
     fun getWindowGeometry(windowName: String): String
     fun setWindowGeometry(windowName: String, geometry: String)
-
-    fun getBand(): Band
-    fun setBand(band: Band)
 }

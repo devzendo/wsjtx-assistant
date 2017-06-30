@@ -29,7 +29,7 @@ import javax.swing.event.ListSelectionListener
  * limitations under the License.
  */
 
-class AssistantMainPanel(val getBand: () -> Band, val setBand: (band: Band)-> Unit): JPanel(), ActionListener, ListSelectionListener {
+class AssistantMainPanel(): JPanel(), ActionListener, ListSelectionListener {
     val logger = LoggerFactory.getLogger(AssistantMainPanel::class.java)
 
     val callsignModel = DefaultListModel<String>()
@@ -45,18 +45,6 @@ class AssistantMainPanel(val getBand: () -> Band, val setBand: (band: Band)-> Un
         val qslViaEQSLRadio = JRadioButton("QSL via eQSL.cc")
 
         setLayout(BorderLayout())
-
-        val bandSelector = JComboBox<Band>(Band.values())
-        bandSelector.selectedItem = getBand()
-        bandSelector.addActionListener {
-            val selectedItem = bandSelector.selectedItem
-            logger.info("Band selected item is of type " + selectedItem.javaClass.simpleName)
-            val selection: Band = selectedItem as Band
-            logger.info("Band selection changed to " + selection)
-            setBand(selection)
-            // need to pass the selection on to the listeners (the tailer)
-        }
-        add(bandSelector, BorderLayout.NORTH)
 
         callsignList.visibleRowCount = 10
         callsignList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION)

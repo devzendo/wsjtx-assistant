@@ -87,7 +87,7 @@ fun main(args: Array<String>) {
             val windowPersistence = DefaultWindowGeometryStorePersistence()
             val windowGeometryStore = WindowGeometryStore(windowPersistence)
             val menuWiring = MenuWiring()
-            val mainPanel = AssistantMainPanel({ prefs.getBand() }, { prefs.setBand(it) })
+            val mainPanel = AssistantMainPanel()
             val mainFrame = AssistantMainFrame(windowGeometryStore, menuWiring, mainPanel)
             cursorManager.setMainFrame(mainFrame)
             // this is triggered when the window has actually closed (after this was invoked via menu and the shutdown

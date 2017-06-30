@@ -1,11 +1,7 @@
 package org.devzendo.wsjtxassistant.prefs
 
 import org.devzendo.wsjtxassistant.logging.ConsoleLoggingUnittestCase
-import org.devzendo.wsjtxassistant.logparse.Band
-import org.hamcrest.MatcherAssert.assertThat
-import org.hamcrest.Matchers.equalTo
 import org.junit.Rule
-import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -33,31 +29,10 @@ class TestDefaultAssistantPrefs: ConsoleLoggingUnittestCase() {
 
     var iniFile: File? = null
 
-    @Test
-    fun noBandSetInitiallySoGet20m() {
-        val prefs = createPrefs()
-        assertThat(prefs.getBand(), equalTo(Band.BAND_20M))
-    }
-
     private fun createPrefs(): AssistantPrefs {
         iniFile = File(tempDir.root, "prefs.ini")
         iniFile!!.deleteOnExit()
         logger.info("ini file is " + iniFile!!.absolutePath)
         return DefaultAssistantPrefs(iniFile!!)
-    }
-
-    @Test
-    fun bandCanBeChangedAndReRead() {
-        val prefs = createPrefs()
-        prefs.setBand(Band.BAND_630M)
-        assertThat(prefs.getBand(), equalTo(Band.BAND_630M))
-    }
-
-    @Test
-    fun bandCanBeChangedAndReReadAfterReload() {
-        val prefs = createPrefs()
-        prefs.setBand(Band.BAND_630M)
-        val reReadPrefs = DefaultAssistantPrefs(iniFile!!)
-        assertThat(reReadPrefs.getBand(), equalTo(Band.BAND_630M))
     }
 }
