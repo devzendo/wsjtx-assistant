@@ -26,7 +26,7 @@ import java.time.temporal.ChronoField.HOUR_OF_DAY
 import java.time.temporal.ChronoField.MINUTE_OF_HOUR
 import java.time.temporal.ChronoField.MONTH_OF_YEAR
 import java.time.temporal.ChronoField.YEAR
-import java.util.HashMap
+import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -158,7 +158,7 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
     fun parseForBand(band: Band, callback: (logEntry: LogEntry) -> Unit) {
         val reader = LogReader()
         Files.lines(file()).forEach {
-            reader.processLine(band, callback, it!!)
+            reader.processLine(Optional.of(band), callback, it!!)
         }
     }
 
@@ -167,7 +167,7 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
         var currentBand: Band? = null
         var currentDate: LocalDate? = null
 
-        fun processLine(band: Band, callback: (logEntry: LogEntry) -> Unit, line: String) {
+        fun processLine(band: Optional<Band>, callback: (logEntry: LogEntry) -> Unit, line: String) {
             logger.debug("Line [{}]", line)
             // Only interested in data from a specific band, and the indicator for changing band/mode looks like:
             // 2015-Apr-15 20:13  14.076 MHz  JT9
@@ -201,7 +201,7 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
                 val cgrid = groups[7]!!.value
                 // callsigns must have at least one digit.
                 if (ccallsign.contains("\\d".toRegex())) {
-                    if (currentDate != null && band == currentBand) {
+                    if (currentDate != null && (!band.isPresent || (band.isPresent && band.get() == currentBand))) {
                         val entryLocalTime = LocalTime.parse(ctime, TIME_FORMATTER)!!
                         val dateTime = LocalDateTime.of(currentDate, entryLocalTime)
                         val logEntry = LogEntry(dateTime,
@@ -219,56 +219,62 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
         }
     }
 
-    fun tailForBand(band: Band, callback: (logEntry: LogEntry) -> Unit): Closeable {
+    private inner class CloseableTailer(private val band: Optional<Band>, private val callback: (logEntry: LogEntry) -> Unit): Closeable {
 
-        class CloseableTailer(band: Band, callback: (logEntry: LogEntry) -> Unit): Closeable {
+        private inner class OurTailerListener: TailerListenerAdapter() {
+            var tailer: Tailer? = null
 
-            inner class OurTailerListener: TailerListenerAdapter() {
-                var tailer: Tailer? = null
-
-                override fun init(tailer: Tailer) {
-                    this.tailer = tailer
-                }
-
-                override fun handle(ex: Exception?) {
-                    val message = "Problem tailing log file " + file() + ": " + ex
-                    logger.error(message)
-                    tailer?.stop()
-                    throw RuntimeException(message, ex)
-                }
-                override fun fileNotFound() {
-                    val message = "File " + file() + " not found"
-                    logger.error(message)
-                    tailer?.stop()
-                    throw RuntimeException(message)
-                }
-
-                override fun handle(line: String?) {
-                    reader.processLine(band, callback, line!!)
-                }
+            override fun init(tailer: Tailer) {
+                this.tailer = tailer
             }
 
-            val listener = OurTailerListener()
-            val reader = LogReader()
-            val tailer = Tailer(file().toFile(), listener, 250)
-            init {
-                val tailThread = Thread({
-                    logger.debug("Start of tailer thread")
-                    tailer.run()
-                    logger.debug("End of tailer thread")
-                })
-                tailThread.name = "Tailer reader"
-                tailThread.setDaemon(true)
-                tailThread.start()
-                logger.debug("Starting tailer thread")
+            override fun handle(ex: Exception?) {
+                val message = "Problem tailing log file " + file() + ": " + ex
+                logger.error(message)
+                tailer?.stop()
+                throw RuntimeException(message, ex)
+            }
+            override fun fileNotFound() {
+                val message = "File " + file() + " not found"
+                logger.error(message)
+                tailer?.stop()
+                throw RuntimeException(message)
             }
 
-            override fun close() {
-                logger.debug("Stopping tailer")
-                tailer.stop()
+            override fun handle(line: String?) {
+                reader.processLine(band, callback, line!!)
             }
-
         }
-        return CloseableTailer(band, callback)
+
+        private val listener = OurTailerListener()
+        private val reader = LogReader()
+        private val tailer = Tailer(file().toFile(), listener, 250)
+        init {
+            val tailThread = Thread({
+                logger.debug("Start of tailer thread")
+                tailer.run()
+                logger.debug("End of tailer thread")
+            })
+            tailThread.name = "Tailer reader"
+            tailThread.setDaemon(true)
+            tailThread.start()
+            logger.debug("Starting tailer thread")
+        }
+
+        override fun close() {
+            logger.debug("Stopping tailer")
+            tailer.stop()
+        }
+
+    }
+
+    fun tailForBand(band: Band, callback: (logEntry: LogEntry) -> Unit): Closeable {
+        logger.debug("Tailing for specific band " + band)
+        return CloseableTailer(Optional.of(band), callback)
+    }
+
+    fun tail(callback: (logEntry: LogEntry) -> Unit): Closeable {
+        logger.debug("Tailing for all bands")
+        return CloseableTailer(Optional.empty<Band>(), callback)
     }
 }
