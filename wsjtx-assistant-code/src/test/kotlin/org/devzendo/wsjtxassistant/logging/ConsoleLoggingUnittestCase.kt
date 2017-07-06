@@ -3,6 +3,7 @@ package org.devzendo.wsjtxassistant.logging
 import org.apache.log4j.BasicConfigurator
 import org.junit.After
 import org.junit.Before
+import org.junit.BeforeClass
 
 /**
  * Copyright (C) 2008-2017 Matt Gumbley, DevZendo.org http://devzendo.org
@@ -20,11 +21,12 @@ import org.junit.Before
  * limitations under the License.
  */
 abstract class ConsoleLoggingUnittestCase {
-
-    // Intended to be callable from @BeforeClass when logging is needed
-    fun setupLoggingStatically() {
-        BasicConfigurator.resetConfiguration()
-        BasicConfigurator.configure()
+    companion object {
+        @BeforeClass @JvmStatic
+        fun setupLoggingStatically() {
+            BasicConfigurator.resetConfiguration()
+            BasicConfigurator.configure()
+        }
     }
 
     @Before
