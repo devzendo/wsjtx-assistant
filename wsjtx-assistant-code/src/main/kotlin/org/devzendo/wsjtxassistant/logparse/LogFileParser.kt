@@ -52,7 +52,7 @@ typealias Callsign = String
 typealias Grid = String
 enum class Band { BAND_2200M, BAND_630M, BAND_160M, BAND_80M, BAND_60M, BAND_40M, BAND_30M, BAND_20M, BAND_17M,
     BAND_15M, BAND_12M, BAND_10M, BAND_6M, BAND_4M, BAND_2M }
-data class LogEntry(val date: LocalDateTime, val power: Power, val offset: Offset, val mode: Mode,
+data class LogEntry(val localDateTime: LocalDateTime, val power: Power, val offset: Offset, val mode: Mode,
                     val callsign: Callsign, val dxCallsign: Callsign, val grid: Grid)
 
 // 2015-Apr-15 20:13  14.076 MHz  JT9
@@ -95,7 +95,7 @@ private fun initialiseTimeFormatter(): DateTimeFormatter {
 private val FREQ_TO_BAND = HashMap<String, Band>()
 
 class LogFileParser(val logFile: Path = defaultLogFile()) {
-    val logger = LoggerFactory.getLogger(LogFileParser::class.java)
+    val logger = LoggerFactory.getLogger(LogFileParser::class.java)!!
 
     init {
         if (!Files.exists(logFile) || !Files.isRegularFile(logFile)) {

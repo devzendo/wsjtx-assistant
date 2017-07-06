@@ -4,17 +4,26 @@ import org.devzendo.commonapp.gui.*
 import org.devzendo.commonapp.gui.GUIUtils.runOnEventThread
 import org.devzendo.commonapp.gui.menu.MenuWiring
 import org.devzendo.commoncode.logging.Logging
+import org.devzendo.wsjtxassistant.concurrency.DaemonThreadFactory
 import org.devzendo.wsjtxassistant.gui.*
+import org.devzendo.wsjtxassistant.logparse.LogFileParser
+import org.devzendo.wsjtxassistant.persistence.H2PersistentFilter
+import org.devzendo.wsjtxassistant.persistence.PersistentFilter
 import org.devzendo.wsjtxassistant.prefs.AssistantPrefs
-import org.slf4j.LoggerFactory
 import org.devzendo.wsjtxassistant.prefs.DefaultAssistantPrefs
 import org.devzendo.wsjtxassistant.prefs.PrefsFactory
 import org.devzendo.wsjtxassistant.prefs.PrefsStartupHelper
+import org.slf4j.LoggerFactory
 import org.slf4j.bridge.SLF4JBridgeHandler
 import java.awt.AWTEvent
 import java.awt.Toolkit
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
+import java.io.Closeable
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import javax.swing.SwingUtilities
 
 
 /**
@@ -34,7 +43,7 @@ import java.awt.event.WindowEvent
  */
 
 // Just for the logger
-class Main {}
+class Main
 
 fun main(args: Array<String>) {
     val logger = LoggerFactory.getLogger(Main::class.java)
@@ -47,8 +56,15 @@ fun main(args: Array<String>) {
 
     ThreadCheckingRepaintManager.initialise()
 
-    //val wsjtxTailer = WSJTXTailer()
+    val wsjtxTailer = LogFileParser()
+    var tailer: Closeable? = null // initialised in the startup helper, closed in window closer
+    var persistentFilter: PersistentFilter? = null // initialised in the startup helper, closed in window closer
+
     val prefsFactory = PrefsFactory(".wsjtxassistant", "wsjtxassistant.ini")
+
+    val executor = ThreadPoolExecutor(5, 10, 2000L, TimeUnit.MILLISECONDS,
+            ArrayBlockingQueue<Runnable>(10),
+            DaemonThreadFactory("non-swing-thread-"))
 
     // Sun changed their recommendations and now recommends the UI be built
     // on the EDT, so I think flagging creation on non-EDT is OK.
@@ -89,27 +105,52 @@ fun main(args: Array<String>) {
             val menuWiring = MenuWiring()
             val mainPanel = AssistantMainPanel()
             val mainFrame = AssistantMainFrame(windowGeometryStore, menuWiring, mainPanel)
-            cursorManager.setMainFrame(mainFrame)
+            cursorManager.mainFrame = mainFrame
             // this is triggered when the window has actually closed (after this was invoked via menu and the shutdown
             // has run) - NOT when close is requested.
             mainFrame.addWindowListener(object: WindowAdapter() {
                 override fun windowClosed(e: WindowEvent) {
                     logger.info("Detected window closed")
+                    tailer?.close()
+                    persistentFilter?.close()
                     System.exit(0)
                 }})
 
             val fileMenu = FileMenu(menuWiring)
             val menu = MenuImpl(menuWiring, fileMenu)
-            mainFrame.setJMenuBar(menu.menuBar)
+            mainFrame.jMenuBar = menu.menuBar
 
             val closeAL = MainFrameCloseActionListener(windowGeometryStore, mainFrame, cursorManager)
             menuWiring.setActionListener(AssistantMenuIdentifiers.FILE_EXIT, closeAL)
 
             // also handles the OSX close window red dot, by triggering file/exit
-            val startupListener = StartupAWTEventListener(mainFrame, cursorManager, menuWiring, Runnable { })
+            val startupListener = StartupAWTEventListener(mainFrame, cursorManager, menuWiring, Runnable {
+                persistentFilter = H2PersistentFilter(prefsFactory.prefsDir)
+
+                // tail -> filter (incoming tail of everything)
+                tailer = wsjtxTailer.tail { logEntry ->
+                    executor.submit {
+                        persistentFilter?.incoming(logEntry)
+                    }
+                }
+
+                // filter -> UI (new info that's not been filtered out by filter)
+                persistentFilter?.publish { logEntry ->
+                    SwingUtilities.invokeLater {
+                        mainPanel.incomingNew(logEntry)
+                    }
+                }
+
+                // UI -> filter (store user choice)
+                mainPanel.record { logEntry, state ->
+                    executor.submit {
+                        persistentFilter?.record(logEntry, state)
+                    }
+                }
+            })
             Toolkit.getDefaultToolkit().addAWTEventListener(startupListener, AWTEvent.WINDOW_EVENT_MASK)
 
-            mainFrame.setVisible(true)
+            mainFrame.isVisible = true
 
 
         } catch (e: Exception) {

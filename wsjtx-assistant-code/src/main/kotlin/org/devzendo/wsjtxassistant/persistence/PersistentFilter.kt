@@ -1,4 +1,8 @@
-package org.devzendo.wsjtxassistant.data
+package org.devzendo.wsjtxassistant.persistence
+
+import org.devzendo.wsjtxassistant.data.CallsignState
+import org.devzendo.wsjtxassistant.logparse.LogEntry
+import java.io.Closeable
 
 /**
  * Copyright (C) 2008-2017 Matt Gumbley, DevZendo.org http://devzendo.org
@@ -15,7 +19,8 @@ package org.devzendo.wsjtxassistant.data
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-enum class CallsignState {
-    // max of 15 chars, in the database
-    DOESNTQSL, WORKEDALREADY, QSLVIABURO, QSLVIAEQSL, IGNOREFORNOW
+interface PersistentFilter: Closeable {
+    fun incoming(logEntry: LogEntry) // from the tailer, everything
+    fun record(logEntry: LogEntry, state: CallsignState) // store user choice
+    fun publish(publisher: (logEntry: LogEntry) -> Unit) // incoming that's not filtered out
 }

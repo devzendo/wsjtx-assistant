@@ -2,7 +2,7 @@ package org.devzendo.wsjtxassistant.gui
 
 import org.devzendo.commonapp.gui.GUIUtils.runOnEventThread
 import org.devzendo.wsjtxassistant.data.CallsignState
-import org.devzendo.wsjtxassistant.logparse.Band
+import org.devzendo.wsjtxassistant.logparse.LogEntry
 import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
 import java.awt.Dimension
@@ -29,8 +29,10 @@ import javax.swing.event.ListSelectionListener
  * limitations under the License.
  */
 
-class AssistantMainPanel(): JPanel(), ActionListener, ListSelectionListener {
-    val logger = LoggerFactory.getLogger(AssistantMainPanel::class.java)
+class AssistantMainPanel : JPanel(), ActionListener, ListSelectionListener {
+    val logger = LoggerFactory.getLogger(AssistantMainPanel::class.java)!!
+
+    var persister: ((logEntry: LogEntry, state: CallsignState) -> Unit)? = null
 
     val callsignModel = DefaultListModel<String>()
     val callsignList = JList(callsignModel)
@@ -44,10 +46,10 @@ class AssistantMainPanel(): JPanel(), ActionListener, ListSelectionListener {
         val qslViaBuroRadio = JRadioButton("QSL via Bureau")
         val qslViaEQSLRadio = JRadioButton("QSL via eQSL.cc")
 
-        setLayout(BorderLayout())
+        layout = BorderLayout()
 
         callsignList.visibleRowCount = 10
-        callsignList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
+        callsignList.selectionMode = ListSelectionModel.SINGLE_SELECTION
         val listScroller = JScrollPane(callsignList)
         listScroller.preferredSize = Dimension(250, 80)
         add(listScroller, BorderLayout.CENTER)
@@ -70,7 +72,7 @@ class AssistantMainPanel(): JPanel(), ActionListener, ListSelectionListener {
         controlGroupPanel.layout = BorderLayout()
         controlGroupPanel.add(buttonPanel, BorderLayout.CENTER)
         controlGroupPanel.add(storeButton, BorderLayout.SOUTH)
-        storeButton.setEnabled(false) // until something in the list is selected
+        storeButton.isEnabled = false // until something in the list is selected
 
         add(controlGroupPanel, BorderLayout.SOUTH)
 
@@ -93,15 +95,15 @@ class AssistantMainPanel(): JPanel(), ActionListener, ListSelectionListener {
     }
 
     override fun valueChanged(e: ListSelectionEvent?) {
-        if (!e!!.getValueIsAdjusting()) {
+        if (!e!!.valueIsAdjusting) {
 
-            if (callsignList.getSelectedIndex() == -1) {
+            if (callsignList.selectedIndex == -1) {
                 //No selection, disable store button.
-                storeButton.setEnabled(false)
+                storeButton.isEnabled = false
 
             } else {
                 //Selection, enable the store button.
-                storeButton.setEnabled(true)
+                storeButton.isEnabled = true
             }
         }
     }
@@ -112,5 +114,15 @@ class AssistantMainPanel(): JPanel(), ActionListener, ListSelectionListener {
 //        when (callsignState) {
 //            CallsignState.DOESNTQSL ->
 //        }
+        // TODO call the persister if it's not null, with the selected logEntry / callsign state
+    }
+
+    fun record(persister: (logEntry: LogEntry, state: CallsignState) -> Unit) {
+        this.persister = persister
+    }
+
+    fun incomingNew(logEntry: LogEntry) {
+
+
     }
 }
