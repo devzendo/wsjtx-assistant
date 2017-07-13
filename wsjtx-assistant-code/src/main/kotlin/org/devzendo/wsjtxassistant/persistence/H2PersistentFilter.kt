@@ -1,21 +1,25 @@
 package org.devzendo.wsjtxassistant.persistence
 
+import com.sun.xml.internal.ws.spi.db.BindingContextFactory.LOGGER
+import org.apache.commons.lang3.StringUtils
 import org.devzendo.wsjtxassistant.data.CallsignState
+import org.devzendo.wsjtxassistant.logparse.Callsign
 import org.devzendo.wsjtxassistant.logparse.LogEntry
-import org.springframework.jdbc.core.RowMapper
-import java.io.File
-import org.springframework.jdbc.datasource.SingleConnectionDataSource
-import org.springframework.jdbc.core.simple.SimpleJdbcTemplate
-import com.sun.tools.corba.se.idl.Util.getAbsolutePath
-import org.h2.engine.ExistenceChecker
-import com.sun.xml.internal.ws.spi.db.BindingContextFactory.LOGGER
-import com.sun.tools.corba.se.idl.Util.getAbsolutePath
-import java.sql.ResultSet
-import java.sql.SQLException
-import com.sun.xml.internal.ws.spi.db.BindingContextFactory.LOGGER
-import org.devzendo.wsjtxassistant.logparse.LogFileParser
 import org.devzendo.wsjtxassistant.logparse.Mode
+import org.h2.engine.ExistenceChecker
 import org.slf4j.LoggerFactory
+import org.springframework.dao.IncorrectResultSizeDataAccessException
+import org.springframework.jdbc.core.RowMapper
+import org.springframework.jdbc.core.simple.SimpleJdbcTemplate
+import org.springframework.jdbc.datasource.SingleConnectionDataSource
+import java.io.File
+import java.sql.ResultSet
+import java.util.*
+import com.sun.xml.internal.ws.spi.db.BindingContextFactory.LOGGER
+import org.springframework.jdbc.CannotGetJdbcConnectionException
+import org.springframework.jdbc.datasource.DataSourceUtils
+import java.sql.SQLException
+import java.util.logging.Level
 
 
 /**
@@ -47,7 +51,7 @@ class H2PersistentFilter(storeDir: File) : PersistentFilter {
 
     init {
         val needToCreate = !exists()
-        val dbURL = "jdbc:h2:" + dbFile.getAbsolutePath()
+        val dbURL = "jdbc:h2:" + dbFile.getAbsolutePath() + ";AUTOCOMMIT=ON"
         logger.debug("Opening database at {}", dbFile.getAbsolutePath())
         dataSource = SingleConnectionDataSource(dbURL, "sa", "", false)
         template = SimpleJdbcTemplate(dataSource)
@@ -78,7 +82,7 @@ class H2PersistentFilter(storeDir: File) : PersistentFilter {
 
     private fun create() {
         LOGGER.info("Creating database...")
-        val ddls = arrayOf("CREATE TABLE LogEntries(callsign VARCHAR(25), dxCallsign VARCHAR(25), localDateTime TIMESTAMP, power INT, offsetFrequency INT, mode VARCHAR(10), grid VARCHAR(10), state VARCHAR(15), PRIMARY KEY(callsign))")
+        val ddls = arrayOf("CREATE TABLE LogEntries (callsign VARCHAR(25), dxCallsign VARCHAR(25), localDateTime TIMESTAMP, power INT, offsetFrequency INT, mode VARCHAR(10), grid VARCHAR(10), state VARCHAR(15), PRIMARY KEY(callsign))")
         for (ddl in ddls) {
             template.getJdbcOperations().execute(ddl)
         }
@@ -91,17 +95,62 @@ class H2PersistentFilter(storeDir: File) : PersistentFilter {
 
     // The user has chosen that this LogEntry has this CallsignState; persist the entry.
     override fun record(logEntry: LogEntry, state: CallsignState) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        LOGGER.info("Storing record " + logEntry + " with state " + state)
+        val sql = "INSERT INTO LogEntries (callsign, dxCallsign, localDateTime, power, offsetFrequency, mode, grid, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        template.jdbcOperations.update(
+                sql,
+                StringUtils.defaultString(logEntry.callsign),
+                StringUtils.defaultString(logEntry.dxCallsign),
+                StringUtils.defaultString(logEntry.localDateTime.toString()),
+                logEntry.power,
+                logEntry.offset,
+                StringUtils.defaultString(logEntry.mode.toString()),
+                StringUtils.defaultString(logEntry.grid),
+                StringUtils.defaultString(state.toString()))
     }
 
     // An entry has been received from the tailer; if it is not ignored by a recording (see record), it is given to
     // the publisher (if it has been set by publish)
     override fun incoming(logEntry: LogEntry) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-        // TODO pass things that get past filter to publisher
+        val state: Optional<CallsignState> = getRecordedStateForCallsign(logEntry.callsign)
+        val filterOut = (state.isPresent && (canIgnore(state.get())))
+        if (!filterOut) {
+            publisher?.invoke(logEntry)
+        }
+    }
+
+    private fun canIgnore(state: CallsignState): Boolean {
+        return when(state) {
+            CallsignState.WORKEDALREADY -> true
+            CallsignState.DOESNTQSL -> true
+            CallsignState.IGNOREFORNOW -> true
+            else -> false
+        }
+    }
+
+    private fun getRecordedStateForCallsign(callsign: Callsign): Optional<CallsignState> {
+        LOGGER.info("Searching for entry from callsign " + callsign)
+        val sql = "SELECT * FROM LogEntries WHERE callsign = ?"
+        try {
+            val queriedObject: StoredLogEntryWithCallsignState = template.queryForObject(sql, rowMapper, callsign)
+            LOGGER.fine("queriedObject is " + queriedObject)
+            val state = queriedObject.callsignState
+            LOGGER.info("Callsign " + callsign + " has state " + state)
+            return Optional.of(state)
+        } catch (e: IncorrectResultSizeDataAccessException) {
+            LOGGER.info("No entry stored for callsign " + callsign)
+            return Optional.empty()
+        }
     }
 
     override fun close() {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        LOGGER.info("Closing db")
+        try {
+            DataSourceUtils.getConnection(dataSource).close()
+        } catch (e: CannotGetJdbcConnectionException) {
+            LOGGER.log(Level.WARNING, "Failed to close db: {}", e.message)
+        } catch (e: SQLException) {
+            LOGGER.log(Level.WARNING, "Failed to close db: {}", e.message)
+        }
     }
 }

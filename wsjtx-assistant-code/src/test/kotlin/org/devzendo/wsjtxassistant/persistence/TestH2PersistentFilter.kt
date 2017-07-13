@@ -1,13 +1,25 @@
 package org.devzendo.wsjtxassistant.persistence
 
+import com.spotify.hamcrest.optional.OptionalMatchers
+import com.spotify.hamcrest.optional.OptionalMatchers.emptyOptional
+import com.spotify.hamcrest.optional.OptionalMatchers.optionalWithValue
+import org.devzendo.commoncode.concurrency.ThreadUtils
+import org.devzendo.wsjtxassistant.data.CallsignState
 import org.devzendo.wsjtxassistant.logging.ConsoleLoggingUnittestCase
 import org.devzendo.wsjtxassistant.logparse.LogEntry
+import org.devzendo.wsjtxassistant.logparse.Mode
+import org.hamcrest.MatcherAssert
+import org.hamcrest.MatcherAssert.assertThat
+import org.hamcrest.Matchers
+import org.hamcrest.Matchers.equalTo
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExpectedException
 import org.junit.rules.TemporaryFolder
 import org.slf4j.LoggerFactory
+import java.time.LocalDateTime
 import java.util.*
 
 /**
@@ -45,9 +57,59 @@ class TestH2PersistentFilter : ConsoleLoggingUnittestCase() {
         persistFilter!!.publish { logEntry -> published = Optional.of(logEntry) }
     }
 
+    @After
+    fun after() {
+        persistFilter?.close()
+    }
+
     @Test
     fun entryIsNotIgnoredSoPassItThrough() {
-        System.err.println("test")
+        val logEntry = sampleLogEntry()
+        persistFilter!!.incoming(logEntry)
+        assertThat(published, optionalWithValue<LogEntry?>(equalTo(logEntry)))
+    }
 
+    @Test
+    fun entryIsIgnoredSoDontPassItThrough() {
+        val logEntry = sampleLogEntry()
+        persistFilter!!.record(logEntry, CallsignState.IGNOREFORNOW)
+        persistFilter!!.incoming(logEntry)
+        assertThat(published, emptyOptional())
+    }
+
+    @Test
+    fun entryDoesNotQSLSoDontPassItThrough() {
+        val logEntry = sampleLogEntry()
+        persistFilter!!.record(logEntry, CallsignState.DOESNTQSL)
+        persistFilter!!.incoming(logEntry)
+        assertThat(published, emptyOptional())
+    }
+
+    @Test
+    fun entryAlreadyWorkedSoDontPassItThrough() {
+        val logEntry = sampleLogEntry()
+        persistFilter!!.record(logEntry, CallsignState.WORKEDALREADY)
+        persistFilter!!.incoming(logEntry)
+        assertThat(published, emptyOptional())
+    }
+
+    @Test
+    fun entryUsesEQSLSoPassItThrough() {
+        val logEntry = sampleLogEntry()
+        persistFilter!!.record(logEntry, CallsignState.QSLVIAEQSL)
+        persistFilter!!.incoming(logEntry)
+        assertThat(published, optionalWithValue<LogEntry?>(equalTo(logEntry)))
+    }
+
+    @Test
+    fun entryUsesBureauSoPassItThrough() {
+        val logEntry = sampleLogEntry()
+        persistFilter!!.record(logEntry, CallsignState.QSLVIABURO)
+        persistFilter!!.incoming(logEntry)
+        assertThat(published, optionalWithValue<LogEntry?>(equalTo(logEntry)))
+    }
+
+    private fun sampleLogEntry(): LogEntry {
+        return LogEntry(LocalDateTime.now(), -18, 980, Mode.JT65, "M0CUV", "CQ", "IO80")
     }
 }
