@@ -46,9 +46,8 @@ import javax.swing.SwingUtilities
 class Main
 
 fun main(args: Array<String>) {
-    val logger = LoggerFactory.getLogger(Main::class.java)
-
     SLF4JBridgeHandler.install()
+    val logger = LoggerFactory.getLogger(Main::class.java)!!
     val logging = Logging.getInstance()
     val finalArgList = logging.setupLoggingFromArgs(args.toMutableList())
 
@@ -62,9 +61,9 @@ fun main(args: Array<String>) {
 
     val prefsFactory = PrefsFactory(".wsjtxassistant", "wsjtxassistant.ini")
 
-    val executor = ThreadPoolExecutor(5, 10, 2000L, TimeUnit.MILLISECONDS,
-            ArrayBlockingQueue<Runnable>(10),
-            DaemonThreadFactory("non-swing-thread-"))
+    val executor = ThreadPoolExecutor(5, 100, 2000L, TimeUnit.MILLISECONDS,
+            ArrayBlockingQueue<Runnable>(100),
+            DaemonThreadFactory("executor-thread-"))
 
     // Sun changed their recommendations and now recommends the UI be built
     // on the EDT, so I think flagging creation on non-EDT is OK.
@@ -127,10 +126,10 @@ fun main(args: Array<String>) {
             val startupListener = StartupAWTEventListener(mainFrame, cursorManager, menuWiring, Runnable {
                 persistentFilter = H2PersistentFilter(prefsFactory.prefsDir)
 
-                // tail -> filter (incoming tail of everything)
-                tailer = wsjtxTailer.tail { logEntry ->
+                // UI -> filter (store user choice)
+                mainPanel.record { logEntry, state ->
                     executor.submit {
-                        persistentFilter?.incoming(logEntry)
+                        persistentFilter?.record(logEntry, state)
                     }
                 }
 
@@ -141,11 +140,9 @@ fun main(args: Array<String>) {
                     }
                 }
 
-                // UI -> filter (store user choice)
-                mainPanel.record { logEntry, state ->
-                    executor.submit {
-                        persistentFilter?.record(logEntry, state)
-                    }
+                // tail -> filter (incoming tail of everything)
+                tailer = wsjtxTailer.tail { logEntry ->
+                    persistentFilter?.incoming(logEntry)
                 }
             })
             Toolkit.getDefaultToolkit().addAWTEventListener(startupListener, AWTEvent.WINDOW_EVENT_MASK)

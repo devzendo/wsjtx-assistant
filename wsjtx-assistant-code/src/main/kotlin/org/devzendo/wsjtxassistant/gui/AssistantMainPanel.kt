@@ -5,6 +5,7 @@ import org.devzendo.wsjtxassistant.data.CallsignState
 import org.devzendo.wsjtxassistant.logparse.LogEntry
 import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
+import java.awt.Component
 import java.awt.Dimension
 import java.awt.event.ActionEvent
 import java.awt.event.ActionListener
@@ -34,31 +35,29 @@ class AssistantMainPanel : JPanel(), ActionListener, ListSelectionListener {
 
     var persister: ((logEntry: LogEntry, state: CallsignState) -> Unit)? = null
 
-    val callsignModel = DefaultListModel<String>()
+    val callsignModel = DefaultListModel<LogEntry>()
     val callsignList = JList(callsignModel)
-    val storeButton = JButton("Store")
-    val buttonGroup = ButtonGroup()
+    val doesntQSLRadio: JButton
+    val workedAlreadyRadio: JButton
+    val ignoreForNowRadio: JButton
+    val qslViaBuroRadio: JButton
+    val qslViaEQSLRadio: JButton
 
     init {
-        val doesntQSLRadio = JRadioButton("Does not QSL")
-        val workedAlreadyRadio = JRadioButton("Worked already")
-        val ignoreForNowRadio = JRadioButton("Ignore for now")
-        val qslViaBuroRadio = JRadioButton("QSL via Bureau")
-        val qslViaEQSLRadio = JRadioButton("QSL via eQSL.cc")
+        doesntQSLRadio = JButton("Does not QSL")
+        workedAlreadyRadio = JButton("Worked already")
+        ignoreForNowRadio = JButton("Ignore for now")
+        qslViaBuroRadio = JButton("QSL via Bureau")
+        qslViaEQSLRadio = JButton("QSL via eQSL.cc")
 
         layout = BorderLayout()
 
-        callsignList.visibleRowCount = 10
+        callsignList.visibleRowCount = 30
         callsignList.selectionMode = ListSelectionModel.SINGLE_SELECTION
+        callsignList.cellRenderer = CallsignListCellRenderer()
         val listScroller = JScrollPane(callsignList)
-        listScroller.preferredSize = Dimension(250, 80)
+        listScroller.preferredSize = Dimension(250, 200)
         add(listScroller, BorderLayout.CENTER)
-
-        buttonGroup.add(doesntQSLRadio)
-        buttonGroup.add(workedAlreadyRadio)
-        buttonGroup.add(ignoreForNowRadio)
-        buttonGroup.add(qslViaBuroRadio)
-        buttonGroup.add(qslViaEQSLRadio)
 
         val buttonPanel = JPanel()
         buttonPanel.layout = BoxLayout(buttonPanel, BoxLayout.Y_AXIS)
@@ -71,8 +70,6 @@ class AssistantMainPanel : JPanel(), ActionListener, ListSelectionListener {
         val controlGroupPanel = JPanel()
         controlGroupPanel.layout = BorderLayout()
         controlGroupPanel.add(buttonPanel, BorderLayout.CENTER)
-        controlGroupPanel.add(storeButton, BorderLayout.SOUTH)
-        storeButton.isEnabled = false // until something in the list is selected
 
         add(controlGroupPanel, BorderLayout.SOUTH)
 
@@ -88,41 +85,60 @@ class AssistantMainPanel : JPanel(), ActionListener, ListSelectionListener {
         qslViaEQSLRadio.actionCommand = CallsignState.QSLVIAEQSL.toString()
     }
 
-    fun addCallsign(callsign: String) {
+    internal inner class CallsignListCellRenderer : ListCellRenderer<LogEntry> {
+        protected var defaultRenderer = DefaultListCellRenderer()
+        override fun getListCellRendererComponent(list: JList<out LogEntry>?, value: LogEntry?, index: Int, isSelected: Boolean, cellHasFocus: Boolean): Component {
+            val renderer = defaultRenderer.getListCellRendererComponent(list, value?.callsign, index,
+                    isSelected, cellHasFocus) as JLabel
+            return renderer
+        }
+
+    }
+
+    fun addCallsign(logEntry: LogEntry) {
         runOnEventThread {
-            callsignModel.addElement(callsign)
+            callsignModel.addElement(logEntry)
         }
     }
 
     override fun valueChanged(e: ListSelectionEvent?) {
         if (!e!!.valueIsAdjusting) {
-
-            if (callsignList.selectedIndex == -1) {
-                //No selection, disable store button.
-                storeButton.isEnabled = false
-
-            } else {
-                //Selection, enable the store button.
-                storeButton.isEnabled = true
-            }
+            val enable = callsignList.selectedIndex != -1
+            doesntQSLRadio.isEnabled = enable
+            workedAlreadyRadio.isEnabled = enable
+            ignoreForNowRadio.isEnabled = enable
+            qslViaBuroRadio.isEnabled = enable
+            qslViaEQSLRadio.isEnabled = enable
         }
     }
 
 
     override fun actionPerformed(e: ActionEvent?) {
-        val callsignState = CallsignState.valueOf(buttonGroup.selection.actionCommand)
-//        when (callsignState) {
-//            CallsignState.DOESNTQSL ->
-//        }
-        // TODO call the persister if it's not null, with the selected logEntry / callsign state
+//        val callsignState = CallsignState.valueOf(buttonGroup.selection.actionCommand)
+        val callsignState = CallsignState.valueOf(e!!.actionCommand)
+
+        // Kotlin: invoking possibly null function
+        val selectedValue = callsignList.selectedValue
+        persister?.invoke(selectedValue, callsignState)
+
+        val remove = when (callsignState) {
+            CallsignState.DOESNTQSL -> true
+            CallsignState.WORKEDALREADY -> true
+            CallsignState.IGNOREFORNOW -> true
+            CallsignState.QSLVIABURO -> false
+            CallsignState.QSLVIAEQSL -> false
+        }
+        if (remove) {
+            callsignModel.removeElement(selectedValue)
+        }
     }
 
     fun record(persister: (logEntry: LogEntry, state: CallsignState) -> Unit) {
         this.persister = persister
     }
 
+    // On event thread
     fun incomingNew(logEntry: LogEntry) {
-
-
+        addCallsign(logEntry);
     }
 }

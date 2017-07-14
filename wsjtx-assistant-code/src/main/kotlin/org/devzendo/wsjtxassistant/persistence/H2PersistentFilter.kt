@@ -1,6 +1,5 @@
 package org.devzendo.wsjtxassistant.persistence
 
-import com.sun.xml.internal.ws.spi.db.BindingContextFactory.LOGGER
 import org.apache.commons.lang3.StringUtils
 import org.devzendo.wsjtxassistant.data.CallsignState
 import org.devzendo.wsjtxassistant.logparse.Callsign
@@ -9,17 +8,15 @@ import org.devzendo.wsjtxassistant.logparse.Mode
 import org.h2.engine.ExistenceChecker
 import org.slf4j.LoggerFactory
 import org.springframework.dao.IncorrectResultSizeDataAccessException
+import org.springframework.jdbc.CannotGetJdbcConnectionException
 import org.springframework.jdbc.core.RowMapper
 import org.springframework.jdbc.core.simple.SimpleJdbcTemplate
+import org.springframework.jdbc.datasource.DataSourceUtils
 import org.springframework.jdbc.datasource.SingleConnectionDataSource
 import java.io.File
 import java.sql.ResultSet
-import java.util.*
-import com.sun.xml.internal.ws.spi.db.BindingContextFactory.LOGGER
-import org.springframework.jdbc.CannotGetJdbcConnectionException
-import org.springframework.jdbc.datasource.DataSourceUtils
 import java.sql.SQLException
-import java.util.logging.Level
+import java.util.*
 
 
 /**
@@ -81,7 +78,7 @@ class H2PersistentFilter(storeDir: File) : PersistentFilter {
     }
 
     private fun create() {
-        LOGGER.info("Creating database...")
+        logger.info("Creating database...")
         val ddls = arrayOf("CREATE TABLE LogEntries (callsign VARCHAR(25), dxCallsign VARCHAR(25), localDateTime TIMESTAMP, power INT, offsetFrequency INT, mode VARCHAR(10), grid VARCHAR(10), state VARCHAR(15), PRIMARY KEY(callsign))")
         for (ddl in ddls) {
             template.getJdbcOperations().execute(ddl)
@@ -95,7 +92,7 @@ class H2PersistentFilter(storeDir: File) : PersistentFilter {
 
     // The user has chosen that this LogEntry has this CallsignState; persist the entry.
     override fun record(logEntry: LogEntry, state: CallsignState) {
-        LOGGER.info("Storing record " + logEntry + " with state " + state)
+        logger.info("Storing record " + logEntry + " with state " + state)
         val sql = "INSERT INTO LogEntries (callsign, dxCallsign, localDateTime, power, offsetFrequency, mode, grid, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         template.jdbcOperations.update(
                 sql,
@@ -129,28 +126,28 @@ class H2PersistentFilter(storeDir: File) : PersistentFilter {
     }
 
     private fun getRecordedStateForCallsign(callsign: Callsign): Optional<CallsignState> {
-        LOGGER.info("Searching for entry from callsign " + callsign)
+        logger.info("Searching for entry from callsign " + callsign)
         val sql = "SELECT * FROM LogEntries WHERE callsign = ?"
         try {
             val queriedObject: StoredLogEntryWithCallsignState = template.queryForObject(sql, rowMapper, callsign)
-            LOGGER.fine("queriedObject is " + queriedObject)
+            logger.debug("queriedObject is " + queriedObject)
             val state = queriedObject.callsignState
-            LOGGER.info("Callsign " + callsign + " has state " + state)
+            logger.info("Callsign " + callsign + " has state " + state)
             return Optional.of(state)
         } catch (e: IncorrectResultSizeDataAccessException) {
-            LOGGER.info("No entry stored for callsign " + callsign)
+            logger.info("No entry stored for callsign " + callsign)
             return Optional.empty()
         }
     }
 
     override fun close() {
-        LOGGER.info("Closing db")
+        logger.info("Closing db")
         try {
             DataSourceUtils.getConnection(dataSource).close()
         } catch (e: CannotGetJdbcConnectionException) {
-            LOGGER.log(Level.WARNING, "Failed to close db: {}", e.message)
+            logger.warn("Failed to close db: {}", e.message)
         } catch (e: SQLException) {
-            LOGGER.log(Level.WARNING, "Failed to close db: {}", e.message)
+            logger.warn("Failed to close db: {}", e.message)
         }
     }
 }
