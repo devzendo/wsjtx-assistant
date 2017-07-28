@@ -36,19 +36,16 @@ class AssistantMainPanel : JPanel(), ActionListener, ListSelectionListener {
     var persister: ((logEntry: LogEntry, state: CallsignState) -> Unit)? = null
 
     val callsignModel = DefaultListModel<LogEntry>()
+    val logEntryComparator = Comparator<LogEntry> { a: LogEntry, b: LogEntry -> a.callsign.compareTo(b.callsign) }
+    val callsignSortedSet = java.util.TreeSet<LogEntry>(logEntryComparator) // there's a Kotlin type alias for this; can't make it work
     val callsignList = JList(callsignModel)
-    val doesntQSLRadio: JButton
-    val workedAlreadyRadio: JButton
-    val ignoreForNowRadio: JButton
-    val qslViaBuroRadio: JButton
-    val qslViaEQSLRadio: JButton
+    val doesntQSLRadio = JButton("Does not QSL")
+    val workedAlreadyRadio = JButton("Worked already")
+    val ignoreForNowRadio = JButton("Ignore for now")
+    val qslViaBuroRadio = JButton("QSL via Bureau")
+    val qslViaEQSLRadio = JButton("QSL via eQSL.cc")
 
     init {
-        doesntQSLRadio = JButton("Does not QSL")
-        workedAlreadyRadio = JButton("Worked already")
-        ignoreForNowRadio = JButton("Ignore for now")
-        qslViaBuroRadio = JButton("QSL via Bureau")
-        qslViaEQSLRadio = JButton("QSL via eQSL.cc")
 
         layout = BorderLayout()
 
@@ -56,7 +53,6 @@ class AssistantMainPanel : JPanel(), ActionListener, ListSelectionListener {
         callsignList.selectionMode = ListSelectionModel.SINGLE_SELECTION
         callsignList.cellRenderer = CallsignListCellRenderer()
         val listScroller = JScrollPane(callsignList)
-        listScroller.preferredSize = Dimension(250, 200)
         add(listScroller, BorderLayout.CENTER)
 
         val buttonPanel = JPanel()
@@ -97,7 +93,13 @@ class AssistantMainPanel : JPanel(), ActionListener, ListSelectionListener {
 
     fun addCallsign(logEntry: LogEntry) {
         runOnEventThread {
-            callsignModel.addElement(logEntry)
+            // there should be a better way to handle a sorted list model..
+            if (!callsignSortedSet.contains(logEntry))
+            {
+                callsignSortedSet.add(logEntry)
+                callsignModel.removeAllElements()
+                callsignSortedSet.forEach(callsignModel::addElement)
+            }
         }
     }
 
@@ -114,7 +116,6 @@ class AssistantMainPanel : JPanel(), ActionListener, ListSelectionListener {
 
 
     override fun actionPerformed(e: ActionEvent?) {
-//        val callsignState = CallsignState.valueOf(buttonGroup.selection.actionCommand)
         val callsignState = CallsignState.valueOf(e!!.actionCommand)
 
         // Kotlin: invoking possibly null function
@@ -139,6 +140,6 @@ class AssistantMainPanel : JPanel(), ActionListener, ListSelectionListener {
 
     // On event thread
     fun incomingNew(logEntry: LogEntry) {
-        addCallsign(logEntry);
+        addCallsign(logEntry)
     }
 }
