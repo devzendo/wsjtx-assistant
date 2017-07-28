@@ -142,7 +142,9 @@ fun main(args: Array<String>) {
 
                 // tail -> filter (incoming tail of everything)
                 tailer = wsjtxTailer.tail { logEntry ->
-                    persistentFilter?.incoming(logEntry)
+                    if (logEntry.dxCallsign == "CQ") {
+                        persistentFilter?.incoming(logEntry)
+                    }
                 }
             })
             Toolkit.getDefaultToolkit().addAWTEventListener(startupListener, AWTEvent.WINDOW_EVENT_MASK)
