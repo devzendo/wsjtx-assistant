@@ -1,6 +1,5 @@
 package org.devzendo.wsjtxassistant.persistence
 
-import com.spotify.hamcrest.optional.OptionalMatchers
 import com.spotify.hamcrest.optional.OptionalMatchers.emptyOptional
 import com.spotify.hamcrest.optional.OptionalMatchers.optionalWithValue
 import org.devzendo.commoncode.concurrency.ThreadUtils
@@ -8,9 +7,8 @@ import org.devzendo.wsjtxassistant.data.CallsignState
 import org.devzendo.wsjtxassistant.logging.ConsoleLoggingUnittestCase
 import org.devzendo.wsjtxassistant.logparse.LogEntry
 import org.devzendo.wsjtxassistant.logparse.Mode
-import org.hamcrest.MatcherAssert
+import org.devzendo.wsjtxassistant.logparse.UTCDateTime
 import org.hamcrest.MatcherAssert.assertThat
-import org.hamcrest.Matchers
 import org.hamcrest.Matchers.equalTo
 import org.junit.After
 import org.junit.Before
@@ -20,6 +18,8 @@ import org.junit.rules.ExpectedException
 import org.junit.rules.TemporaryFolder
 import org.slf4j.LoggerFactory
 import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.util.*
 
 /**
@@ -50,6 +50,8 @@ class TestH2PersistentFilter : ConsoleLoggingUnittestCase() {
 
     var persistFilter: PersistentFilter? = null
     var published: Optional<LogEntry> = Optional.empty()
+    val callsign = "M0CUV"
+    val utcZoneId = ZoneId.of("UTC")
 
     @Before
     fun before() {
@@ -109,7 +111,64 @@ class TestH2PersistentFilter : ConsoleLoggingUnittestCase() {
         assertThat(published, optionalWithValue<LogEntry?>(equalTo(logEntry)))
     }
 
+    @Test
+    fun recordDoesNotExist() {
+        assertThat(persistFilter!!.recordExists(callsign), equalTo(false))
+    }
+
+    @Test
+    fun recordExists() {
+        val logEntry = sampleLogEntry()
+        persistFilter!!.record(logEntry, CallsignState.QSLVIABURO)
+
+        assertThat(persistFilter!!.recordExists(callsign), equalTo(true))
+    }
+
+
+    @Test
+    fun canUpdateEntries() {
+        val logEntry = sampleLogEntry()
+        logger.info("==== storing first entry: " + logEntry)
+
+        persistFilter!!.record(logEntry, CallsignState.QSLVIABURO)
+        val stored1 = persistFilter!!.getRecordedStateForCallsign(callsign)
+        assertThat(stored1, optionalWithValue())
+        val callsignState1 = stored1.get()
+        assertThat(callsignState1, equalTo(CallsignState.QSLVIABURO))
+
+        // wait a bit for now() to change
+        ThreadUtils.waitNoInterruption(4000)
+
+        val logEntry2 = sampleLogEntry2()
+        logger.info("==== storing second entry: " + logEntry2)
+        persistFilter!!.record(logEntry2, CallsignState.IGNOREFORNOW)
+        val stored2 = persistFilter!!.getRecordedStateForCallsign(callsign)
+        assertThat(stored2, optionalWithValue())
+        val callsignState2 = stored2.get()
+        assertThat(callsignState2, equalTo(CallsignState.IGNOREFORNOW))
+
+        logger.info("==== re-read second entry: " + logEntry2)
+        val stored3 = persistFilter!!.getLogEntryForCallsign(callsign)
+        assertThat(stored3, optionalWithValue())
+        val reRead = stored3.get()
+        assertThat(reRead, equalTo(logEntry2))
+    }
+
     private fun sampleLogEntry(): LogEntry {
-        return LogEntry(LocalDateTime.now(), -18, 980, Mode.JT65, "M0CUV", "CQ", "IO80")
+        return LogEntry(nowUTC(), -18, 980, Mode.JT65, callsign, "CQ", "IO80")
+    }
+
+    private fun sampleLogEntry2(): LogEntry {
+        return LogEntry(nowUTC(), -5, 230, Mode.JT9, callsign, "CQ DX", "KN95")
+    }
+
+    private fun nowUTC(): UTCDateTime {
+        return UTCDateTime(ZonedDateTime.now(utcZoneId))
+    }
+
+    @Test
+    fun toISO8601DateTime() {
+        val dt = UTCDateTime(ZonedDateTime.of(2017, 2, 22, 17, 39, 15, 0, utcZoneId))
+        assertThat(H2PersistentFilter.toISO8601DateTime(dt), equalTo("2017-02-22 17:39:15+00:00"))
     }
 }

@@ -1,11 +1,18 @@
 package org.devzendo.wsjtxassistant.logparse
 
+import com.spotify.hamcrest.optional.OptionalMatchers.emptyOptional
+import com.spotify.hamcrest.optional.OptionalMatchers.optionalWithValue
 import org.devzendo.commoncode.concurrency.ThreadUtils
 import org.devzendo.wsjtxassistant.logging.ConsoleLoggingUnittestCase
 import org.devzendo.wsjtxassistant.logparse.LogFileParser.LogFileParser.defaultLogFile
+import org.devzendo.wsjtxassistant.logparse.LogFileParser.LogFileParser.parseDateBandChange
+import org.hamcrest.Description
+import org.hamcrest.Matcher
 import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers
 import org.hamcrest.Matchers.*
+import org.hamcrest.TypeSafeDiagnosingMatcher
+import org.assertj.core.api.Assertions.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExpectedException
@@ -18,6 +25,10 @@ import java.io.FileWriter
 import java.nio.file.Files.exists
 import java.nio.file.Files.isRegularFile
 import java.nio.file.Paths
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
 
 private val TEST_FILE = Paths.get("src/test/resources/test-all.txt")
 
@@ -291,5 +302,62 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
         return logFile
     }
 
+    @Test
+    fun invalidParseDateBandChange() {
+        assertThat(parseDateBandChange("2045  Transmitting 3.576 MHz  JT65:  CQ M0CUV JO01"), emptyOptional())
+    }
 
+    internal class DateBandChangeMatcher(private val dateAndBand: LogFileParser.DateBandChange) : TypeSafeDiagnosingMatcher<LogFileParser.DateBandChange>() {
+
+        override fun matchesSafely(item: LogFileParser.DateBandChange,
+                                   mismatchDescription: Description): Boolean {
+            if (item == dateAndBand) {
+                return true
+            } else {
+                val mismatchTexts = mutableListOf<String>()
+                if (item.band != dateAndBand.band) {
+                    mismatchTexts.add("band is not " + dateAndBand.band)
+                }
+                if (item.utcDate != dateAndBand.utcDate) {
+                    mismatchDescription.appendText("UTC date is not " + dateAndBand.utcDate)
+                }
+                mismatchDescription.appendText(mismatchTexts.joinToString())
+                return false
+            }
+        }
+
+        override fun describeTo(description: Description) {
+            description.appendText("a DateBandChange with a value of " + dateAndBand)
+        }
+    }
+
+    fun dateAndBandEqualTo(dateAndBand: LogFileParser.DateBandChange): Matcher<LogFileParser.DateBandChange> {
+        return DateBandChangeMatcher(dateAndBand)
+    }
+
+    @Test
+    fun dateChangeFormatter() {
+        val april18th = LocalDate.parse("2015-Apr-18", LogFileParser.dateChangeFormatter)
+        assertThat(april18th).isEqualTo("2015-04-18")
+    }
+
+    @Test
+    fun parseDateBandChangeTo80m() {
+        val dateBandChange = parseDateBandChange("2015-Apr-18 20:40  3.576 MHz  JT9+JT65")
+        val april18th = LocalDate.parse("2015-Apr-18", LogFileParser.dateChangeFormatter)
+
+        val expected = LogFileParser.DateBandChange(april18th, Band.BAND_80M)
+        assertThat(dateBandChange, optionalWithValue(dateAndBandEqualTo(expected)))
+    }
+
+    @Test
+    fun validUTCDateTime() {
+        UTCDateTime(ZonedDateTime.now(ZoneId.of("UTC")))
+    }
+
+    @Test
+    fun invalidUTCDateTime() {
+        thrown.expectMessage("does not have the UTC zone")
+        UTCDateTime(ZonedDateTime.now(ZoneId.of("CET")))
+    }
 }
