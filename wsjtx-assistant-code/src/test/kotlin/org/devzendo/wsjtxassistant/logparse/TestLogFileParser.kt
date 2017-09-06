@@ -12,7 +12,6 @@ import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers
 import org.hamcrest.Matchers.*
 import org.hamcrest.TypeSafeDiagnosingMatcher
-import org.assertj.core.api.Assertions.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExpectedException
@@ -25,10 +24,11 @@ import java.io.FileWriter
 import java.nio.file.Files.exists
 import java.nio.file.Files.isRegularFile
 import java.nio.file.Paths
+import java.time.DateTimeException
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.ZoneOffset
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 private val TEST_FILE = Paths.get("src/test/resources/test-all.txt")
 
@@ -233,7 +233,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
                 logger.info("appending line " + line)
                 bw.appendln(line)
                 bw.flush()
-                ThreadUtils.waitNoInterruption(250)
+                ThreadUtils.waitNoInterruption(500) // bit flaky
             }
 
             logger.info("writing to log file")
@@ -336,18 +336,29 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
     }
 
     @Test
-    fun dateChangeFormatter() {
-        val april18th = LocalDate.parse("2015-Apr-18", LogFileParser.dateChangeFormatter)
-        assertThat(april18th).isEqualTo("2015-04-18")
-    }
-
-    @Test
-    fun parseDateBandChangeTo80m() {
+    fun parseDateBandChangeTo80mOldFormat() {
         val dateBandChange = parseDateBandChange("2015-Apr-18 20:40  3.576 MHz  JT9+JT65")
-        val april18th = LocalDate.parse("2015-Apr-18", LogFileParser.dateChangeFormatter)
+        val april18th = LocalDate.parse("2015-04-18", DateTimeFormatter.ISO_DATE)
 
         val expected = LogFileParser.DateBandChange(april18th, Band.BAND_80M)
         assertThat(dateBandChange, optionalWithValue(dateAndBandEqualTo(expected)))
+    }
+
+    @Test
+    fun parseDateBandChangeTo20mNewFormat() {
+        val dateBandChange = parseDateBandChange("2015-04-18 20:40  14.076 MHz  JT9+JT65")
+        val april18th = LocalDate.parse("2015-04-18", DateTimeFormatter.ISO_DATE)
+
+        val expected = LogFileParser.DateBandChange(april18th, Band.BAND_20M)
+        assertThat(dateBandChange, optionalWithValue(dateAndBandEqualTo(expected)))
+    }
+
+    @Test
+    fun invalidParseDateBand() {
+        thrown.expect(DateTimeException::class.java)
+        thrown.expectMessage("Could not parse '2017-MM-27' as a valid date in the expected form")
+        parseDateBandChange("2017-MM-27 20:40  14.076 MHz  JT9+JT65")
+        // it'll get past regex extraction but not DateTimeFormatter parsing
     }
 
     @Test

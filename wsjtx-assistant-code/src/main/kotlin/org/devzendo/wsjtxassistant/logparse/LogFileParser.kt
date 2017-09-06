@@ -15,6 +15,7 @@ import java.nio.file.Paths
 import java.time.*
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatterBuilder
+import java.time.format.DateTimeParseException
 import java.time.format.SignStyle
 import java.time.temporal.ChronoField.*
 import java.util.*
@@ -52,8 +53,9 @@ class UTCDateTime(value: ZonedDateTime) : RepresentationType<ZonedDateTime>(valu
 data class LogEntry(val utcDateTime: UTCDateTime, val power: Power, val offset: Offset, val mode: Mode,
                     val callsign: Callsign, val dxCallsign: Callsign, val grid: Grid)
 
-// 2015-Apr-15 20:13  14.076 MHz  JT9
-private val DATE_CHANGE_REGEX = "^(\\d{4}-\\S{3}-\\d{2}) \\d{2}:\\d{2}\\s+(\\d+\\.\\d+) MHz\\s+\\S+\\s*$".toRegex()
+// Earlier versions used 2015-Apr-15 20:13  14.076 MHz  JT9
+// Later versions use 2015-04-15 20:13  14.076 MHz  JT9
+private val DATE_CHANGE_REGEX = "^(\\d{4}-\\S{2,3}-\\d{2}) \\d{2}:\\d{2}\\s+(\\d+\\.\\d+) MHz\\s+\\S+\\s*$".toRegex()
 
 // 0001  -8  0.2  560 # KC0EFQ WA3ETR FN10
 //                            0001        -8         0.2         560      @#      KC0EFQ    WA3ETR     FN10
@@ -93,7 +95,8 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
 
         fun parseDateBandChange(line: String): Optional<DateBandChange> {
             // Only interested in data from a specific band, and the indicator for changing band/mode looks like:
-            // 2015-Apr-15 20:13  14.076 MHz  JT9
+            // 2015-Apr-15 20:13  14.076 MHz  JT9      <-- old format
+            // 2015-04-15 20:13  14.076 MHz  JT9       <-- new format
             // So extract the frequency, and look up the band. This also gives us the date. Records like this are always
             // written at startup, mode change, and at midnight.
             val result = DATE_CHANGE_REGEX.matchEntire(line)
@@ -101,9 +104,9 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
                 val groups = result.groups
                 val dateString = groups[1]!!.value
                 val freqString = groups[2]!!.value
-                logger.debug("Extracted date {} and band {} via regex", dateString, freqString)
                 // I don't use the time from the change line...
-                val currentDate = LocalDate.parse(dateString, dateChangeFormatter)
+                val currentDate = parseDate(dateString)
+                logger.debug("currentDate is " + currentDate +  " for date string " + dateString)
                 val currentBand = FREQ_TO_BAND.get(freqString)
                 logger.debug("Detected changed date {} and band {}", currentDate, currentBand)
                 return Optional.of(DateBandChange(currentDate, currentBand!!))
@@ -113,8 +116,20 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
             }
         }
 
-        var dateChangeFormatter: DateTimeFormatter = initialiseDateChangeFormatter()
-        private fun initialiseDateChangeFormatter(): DateTimeFormatter {
+        private fun parseDate(dateString: String): LocalDate {
+            try {
+                return LocalDate.parse(dateString, dateWithNamedMonthChangeFormatter)
+            } catch (dtpe: DateTimeParseException) {
+            }
+            try {
+                return LocalDate.parse(dateString, DateTimeFormatter.ISO_DATE)
+            } catch (dtpe: DateTimeParseException) {
+            }
+            throw DateTimeException("Could not parse '" + dateString + "' as a valid date in the expected form")
+        }
+
+        private var dateWithNamedMonthChangeFormatter: DateTimeFormatter = initialiseDateWithNamedMonthChangeFormatter()
+        private fun initialiseDateWithNamedMonthChangeFormatter(): DateTimeFormatter {
             val moy = HashMap<Long, String>()
             moy.put(1L, "Jan")
             moy.put(2L, "Feb")
