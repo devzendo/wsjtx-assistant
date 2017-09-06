@@ -38,7 +38,7 @@ import java.util.*
 
 typealias Power = Int
 typealias Offset = Int
-enum class Mode { JT65, JT9 }
+enum class Mode { JT65, JT9, FT8 }
 typealias Callsign = String
 typealias Grid = String
 enum class Band { BAND_2200M, BAND_630M, BAND_160M, BAND_80M, BAND_60M, BAND_40M, BAND_30M, BAND_20M, BAND_17M,
@@ -57,10 +57,14 @@ data class LogEntry(val utcDateTime: UTCDateTime, val power: Power, val offset: 
 // Later versions use 2015-04-15 20:13  14.076 MHz  JT9
 private val DATE_CHANGE_REGEX = "^(\\d{4}-\\S{2,3}-\\d{2}) \\d{2}:\\d{2}\\s+(\\d+\\.\\d+) MHz\\s+\\S+\\s*$".toRegex()
 
-// 0001  -8  0.2  560 # KC0EFQ WA3ETR FN10
-//                            0001        -8         0.2         560      @#      KC0EFQ    WA3ETR     FN10
-private val REPORT_REGEX = "^(\\d{4})\\s+(-\\d+)\\s+[-\\d.]+\\s+(\\d+)\\s([#@])\\s(\\w+)\\s+(\\w+)\\s+([A-Z]{2}\\d{2})\\s*$".toRegex()
+// Note power can be -ve, 0, or +ve
+// 0001  -8  0.2  560 # KC0EFQ WA3ETR FN10               <-- for pre 1.8.0-RC
+// 095430 -11  0.5  460 ~  CQ OF8TA KP25                 <-- for 1.8.0-RC. time incl secs for FT8, ~ as mode, 2xspace after ~
+//                            0001                  -8          0.2          560      @#             KC0EFQ    WA3ETR     FN10
+//                            095430                -11         0.5          460      ~              CQ        OF8TA      KP25
+private val REPORT_REGEX = "^(\\d{4})(?:\\d{2})?\\s+(-?\\d+)\\s+[-?\\d.]+\\s+(\\d+)\\s([#@~])\\s{1,2}(\\w+)\\s+(\\w+)\\s+([A-Z]{2}\\d{2})\\s*$".toRegex()
 private var TIME_FORMATTER = initialiseTimeFormatter()
+// TODO return the dateTime with the seconds for FT8
 private fun initialiseTimeFormatter(): DateTimeFormatter {
     return DateTimeFormatterBuilder()
             .appendValue(HOUR_OF_DAY, 2)
@@ -171,6 +175,7 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
             FREQ_TO_BAND.put("18.102", Band.BAND_17M)
             FREQ_TO_BAND.put("14.078", Band.BAND_20M) // +2
             FREQ_TO_BAND.put("14.076", Band.BAND_20M)
+            FREQ_TO_BAND.put("14.074", Band.BAND_20M) // FT8
             FREQ_TO_BAND.put("10.14", Band.BAND_30M) // +2
             FREQ_TO_BAND.put("10.138", Band.BAND_30M)
             FREQ_TO_BAND.put("7.078", Band.BAND_40M) // +2
@@ -187,6 +192,7 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
             FREQ_TO_BAND.put("0.13613", Band.BAND_2200M)
             return FREQ_TO_BAND
         }
+        // TODO add other FT8 frequencies here
     }
 
     fun file(): Path = logFile
@@ -218,6 +224,14 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
             // 0001 -15  0.1  628 # KK7X K8MDA EN80
             // 0002 -13  1.1 1322 # CQ YV5FRD FK60
             // 0003  -3  0.5 1002 # TF2MSN K1RI FN41
+
+            // Old style CQ records:
+            // [1921  -7  0.5 1700 # CQ RA3QEH LO01       ]
+            // New style CQ records: (1.8.0-RC1?) - yes the difference is another space after the #
+            // [1924 -13 -0.4 2094 #  CQ SV1CEI KM18           ]
+            // and for FT8, it's
+            // [095430 -11  0.5  460 ~  CQ OF8TA KP25        ]
+            // Power can be -ve, 0, +ve
             val reportResult = REPORT_REGEX.matchEntire(line)
             if (reportResult != null) {
                 val groups = reportResult.groups
@@ -236,7 +250,7 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
                         val logEntry = LogEntry(dateTime,
                                 cpower.toInt(),
                                 coffset.toInt(),
-                                if (cmode == "@") Mode.JT9 else Mode.JT65,
+                                modeSymbolToMode(cmode),
                                 ccallsign,
                                 cdxcallsign,
                                 cgrid)
@@ -244,6 +258,15 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
                         callback(logEntry)
                     }
                 }
+            }
+        }
+
+        private fun modeSymbolToMode(cmode: String): Mode {
+            when (cmode) {
+                "@" -> return Mode.JT9
+                "#" -> return Mode.JT65
+                "~" -> return Mode.FT8
+                else -> throw UnsupportedOperationException("Unsupported mode string '" + cmode + "'")
             }
         }
     }

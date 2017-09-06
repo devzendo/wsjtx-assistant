@@ -81,6 +81,8 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
     val dxCallsigns = mutableListOf<Callsign>()
     val callsigns = mutableListOf<Callsign>()
     val grids = mutableListOf<Grid>()
+    val modes = mutableListOf<Mode>()
+    val utcDateTimes = mutableListOf<UTCDateTime>()
 
     fun recordEntry(logEntry: LogEntry): Unit {
         synchronized(logger) {
@@ -88,6 +90,8 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
             callsigns.add(logEntry.callsign)
             dxCallsigns.add(logEntry.dxCallsign)
             grids.add(logEntry.grid)
+            modes.add(logEntry.mode)
+            utcDateTimes.add(logEntry.utcDateTime)
         }
     }
 
@@ -97,6 +101,8 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
             callsigns.add(logEntry.callsign)
             dxCallsigns.add(logEntry.dxCallsign)
             grids.add(logEntry.grid)
+            modes.add(logEntry.mode)
+            utcDateTimes.add(logEntry.utcDateTime)
         }
     }
 
@@ -106,6 +112,8 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
             assertThat(callsigns, hasSize(0))
             assertThat(dxCallsigns, hasSize(0))
             assertThat(grids, hasSize(0))
+            assertThat(modes, hasSize(0))
+            assertThat(utcDateTimes, hasSize(0))
         }
     }
 
@@ -119,11 +127,13 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
         // or use the appalling recordEntryProperty, which has to have its type signature spelled out. ugh.
         parser.parseForBand(Band.BAND_20M, {recordEntry(it)})
         synchronized(logger) {
-            assertThat(callsigns, hasSize(4))
-            assertThat(grids, hasSize(4))
-            assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG", "AE4DR", "RN6MG"))
-            assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO", "SP7EOY", "KW4PL"))
-            assertThat(grids, Matchers.contains("KN12", "EM82", "EM85", "LN08"))
+            assertThat(callsigns, hasSize(7))
+            assertThat(grids, hasSize(7))
+            assertThat(modes, hasSize(7))
+            assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG", "AE4DR", "RN6MG", "OF8TA", "SM6JQZ", "DL1NCH"))
+            assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO", "SP7EOY", "KW4PL", "CQ", "M0TRJ", "CQ"))
+            assertThat(grids, Matchers.contains("KN12", "EM82", "EM85", "LN08", "KP25", "JO57", "JN59"))
+            assertThat(modes, Matchers.contains(Mode.JT65, Mode.JT9, Mode.JT9, Mode.JT9, Mode.FT8, Mode.FT8, Mode.FT8))
         }
     }
 
