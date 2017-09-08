@@ -17,12 +17,10 @@ import org.junit.Test
 import org.junit.rules.ExpectedException
 import org.junit.rules.TemporaryFolder
 import org.slf4j.LoggerFactory
-import java.io.BufferedWriter
-import java.io.File
-import java.io.FileNotFoundException
-import java.io.FileWriter
+import java.io.*
 import java.nio.file.Files.exists
 import java.nio.file.Files.isRegularFile
+import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.DateTimeException
 import java.time.LocalDate
@@ -86,7 +84,8 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
 
     fun recordEntry(logEntry: LogEntry): Unit {
         synchronized(logger) {
-            logger.info("called back with callsign " + logEntry.callsign + " dx callsign " + logEntry.dxCallsign + " grid " + logEntry.grid)
+            logger.info("called back with callsign " + logEntry.callsign + " dx callsign " + logEntry.dxCallsign + " grid " + logEntry.grid +
+                    " mode " + logEntry.mode + " UTC date/time " + logEntry.utcDateTime)
             callsigns.add(logEntry.callsign)
             dxCallsigns.add(logEntry.dxCallsign)
             grids.add(logEntry.grid)
@@ -97,7 +96,8 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
 
     private val recordEntryProperty: (logEntry: LogEntry) -> Unit = { logEntry: LogEntry ->
         synchronized(logger) {
-            logger.info("called back with callsign " + logEntry.callsign + " dx callsign " + logEntry.dxCallsign + " grid " + logEntry.grid)
+            logger.info("called back with callsign " + logEntry.callsign + " dx callsign " + logEntry.dxCallsign + " grid " + logEntry.grid +
+                    " mode " + logEntry.mode + " UTC date/time " + logEntry.utcDateTime)
             callsigns.add(logEntry.callsign)
             dxCallsigns.add(logEntry.dxCallsign)
             grids.add(logEntry.grid)
@@ -137,45 +137,61 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
         }
     }
 
+    class TailedFileFixture(val root: File): Closeable {
+        val logger = LoggerFactory.getLogger(TailedFileFixture::class.java)
+        val logFile = createTailFile()
+        val logFilePath: Path = logFile.toPath()
+
+        // append to log file
+        val fw = FileWriter(logFile.absolutePath, true)
+        val bw = BufferedWriter(fw)
+
+        private fun createTailFile(): File {
+            val logFile = File(root, "tailfile.txt")
+            logFile.deleteOnExit()
+            logger.info("log file is " + logFile.absolutePath)
+            assertThat(logFile.createNewFile(), equalTo(true))
+            assertThat(logFile.toPath(), not(equalTo(defaultLogFile())))
+            return logFile
+        }
+
+        fun flushLine(line: String) {
+            logger.info("appending line " + line)
+            bw.appendln(line)
+            bw.flush()
+            ThreadUtils.waitNoInterruption(500) // bit flaky
+        }
+
+        override fun close() {
+            bw.close()
+        }
+    }
+
     @Test
     fun specificExistingFileCanBeTailedForAGivenBand() {
-        val logFile = createTailFile()
+        val tailedFile = TailedFileFixture(tempDir.root)
+        tailedFile.use {
+            val parser = LogFileParser(tailedFile.logFilePath)
+            logger.info("got parser")
 
-        val parser = LogFileParser(logFile.toPath())
-        logger.info("got parser")
+            logger.info("creating tailer")
+            val tailer = parser.tailForBand(Band.BAND_20M, recordEntryProperty)
+            logger.info("created tailer")
+            tailer.use {
+                // returns immediately, calls back when new data comes in
+                assertIsEmpty()
 
-        logger.info("creating tailer")
-        val tailer = parser.tailForBand(Band.BAND_20M, recordEntryProperty)
-        logger.info("created tailer")
-        tailer.use {
-            // returns immediately, calls back when new data comes in
-            assertIsEmpty()
-
-            // append to log file
-            val fw = FileWriter(logFile.absolutePath, true)
-            val bw = BufferedWriter(fw)
-
-            fun flushLine(line: String) {
-                synchronized(logger) {
-                    logger.info("appending line " + line)
-                    bw.appendln(line)
-                    bw.flush()
-                }
-                ThreadUtils.waitNoInterruption(500)
-            }
-
-            logger.info("writing to log file")
-            bw.use {
+                logger.info("writing to log file")
                 // append a transmission for 20m. There has been no date change yet, so it won't be called back to us.
-                flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
+                tailedFile.flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
                 assertIsEmpty()
 
                 // append a date change. no callback, but next transmission will be.
-                flushLine("2016-May-13 20:32  14.078 MHz  JT9")
+                tailedFile.flushLine("2016-May-13 20:32  14.078 MHz  JT9")
                 assertIsEmpty()
 
                 // transmit, receive callback
-                flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
+                tailedFile.flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
                 synchronized(logger) {
                     assertThat(callsigns, Matchers.contains("LZ1UBO"))
                     assertThat(dxCallsigns, Matchers.contains("CQ"))
@@ -183,7 +199,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
                 }
 
                 // other line added but doesn't match our pattern, no change
-                flushLine("2032 -15 -0.3 1007 @ KW4PL 9H1KR 73")
+                tailedFile.flushLine("2032 -15 -0.3 1007 @ KW4PL 9H1KR 73")
                 synchronized(logger) {
                     assertThat(callsigns, Matchers.contains("LZ1UBO"))
                     assertThat(dxCallsigns, Matchers.contains("CQ"))
@@ -191,7 +207,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
                 }
 
                 // next transmission
-                flushLine("2033 -15 -0.4  838 @ LZ1UBO WA4RG EM82")
+                tailedFile.flushLine("2033 -15 -0.4  838 @ LZ1UBO WA4RG EM82")
                 synchronized(logger){
                     assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG"))
                     assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO"))
@@ -200,7 +216,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
 
                 // append a date and frequency change. no callback, and next transmissino does not match filtered band,
                 // so no callback
-                flushLine("2016-May-13 20:38  10.14 MHz  JT65")
+                tailedFile.flushLine("2016-May-13 20:38  10.14 MHz  JT65")
                 synchronized(logger) {
                     assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG"))
                     assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO"))
@@ -208,7 +224,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
                 }
 
                 // next transmission
-                flushLine("2040 -15 -0.4  838 @ G3XMR K1DDA LM82")
+                tailedFile.flushLine("2040 -15 -0.4  838 @ G3XMR K1DDA LM82")
                 synchronized(logger) {
                     assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG"))
                     assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO"))
@@ -223,42 +239,29 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
 
     @Test
     fun specificExistingFileCanBeTailedForAnyBand() {
-        val logFile = createTailFile()
+        val tailedFile = TailedFileFixture(tempDir.root)
+        tailedFile.use {
+            val parser = LogFileParser(tailedFile.logFilePath)
+            logger.info("got parser")
 
-        val parser = LogFileParser(logFile.toPath())
-        logger.info("got parser")
+            logger.info("creating tailer")
+            val tailer = parser.tail(recordEntryProperty)
+            logger.info("created tailer")
+            tailer.use {
+                // returns immediately, calls back when new data comes in
+                assertIsEmpty()
 
-        logger.info("creating tailer")
-        val tailer = parser.tail(recordEntryProperty)
-        logger.info("created tailer")
-        tailer.use {
-            // returns immediately, calls back when new data comes in
-            assertIsEmpty()
-
-            // append to log file
-            val fw = FileWriter(logFile.absolutePath, true)
-            val bw = BufferedWriter(fw)
-
-            fun flushLine(line: String) {
-                logger.info("appending line " + line)
-                bw.appendln(line)
-                bw.flush()
-                ThreadUtils.waitNoInterruption(500) // bit flaky
-            }
-
-            logger.info("writing to log file")
-            bw.use {
-
+                logger.info("writing to log file")
                 // append a transmission for 20m. There has been no date change yet, so it won't be called back to us.
-                flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
+                tailedFile.flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
                 assertIsEmpty()
 
                 // append a date change. no callback, but next transmission will be.
-                flushLine("2016-May-13 20:32  14.078 MHz  JT9")
+                tailedFile.flushLine("2016-May-13 20:32  14.078 MHz  JT9")
                 assertIsEmpty()
 
                 // transmit, receive callback
-                flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
+                tailedFile.flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
                 synchronized(logger) {
                     assertThat(callsigns, Matchers.contains("LZ1UBO"))
                     assertThat(dxCallsigns, Matchers.contains("CQ"))
@@ -266,7 +269,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
                 }
 
                 // other line added but doesn't match our pattern, no change
-                flushLine("2032 -15 -0.3 1007 @ KW4PL 9H1KR 73")
+                tailedFile.flushLine("2032 -15 -0.3 1007 @ KW4PL 9H1KR 73")
                 synchronized(logger) {
                     assertThat(callsigns, Matchers.contains("LZ1UBO"))
                     assertThat(dxCallsigns, Matchers.contains("CQ"))
@@ -274,7 +277,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
                 }
 
                 // next transmission
-                flushLine("2033 -15 -0.4  838 @ LZ1UBO WA4RG EM82")
+                tailedFile.flushLine("2033 -15 -0.4  838 @ LZ1UBO WA4RG EM82")
                 synchronized(logger) {
                     assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG"))
                     assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO"))
@@ -282,7 +285,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
                 }
 
                 // append a date and frequency change. no callback, next transmissino will be.
-                flushLine("2016-May-13 20:38  10.14 MHz  JT65")
+                tailedFile.flushLine("2016-May-13 20:38  10.14 MHz  JT65")
                 synchronized(logger) {
                     assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG"))
                     assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO"))
@@ -290,7 +293,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
                 }
 
                 // next transmission on new band
-                flushLine("2040 -15 -0.4  838 @ G3XMR K1DDA LM82")
+                tailedFile.flushLine("2040 -15 -0.4  838 @ G3XMR K1DDA LM82")
                 synchronized(logger) {
                     assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG", "K1DDA"))
                     assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO", "G3XMR"))
@@ -298,18 +301,85 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
                 }
             }
         }
+
         logger.info("end of test")
         // wait to see if the thread stops
         ThreadUtils.waitNoInterruption(500)
     }
 
-    private fun createTailFile(): File {
-        val logFile = File(tempDir.root, "tailfile.txt")
-        logFile.deleteOnExit()
-        logger.info("log file is " + logFile.absolutePath)
-        assertThat(logFile.createNewFile(), equalTo(true))
-        assertThat(logFile.toPath(), not(equalTo(defaultLogFile())))
-        return logFile
+    @Test
+    fun lastDateChangeIsUsedForIncomingTransmissionsWhenTailing() {
+        val tailedFile = TailedFileFixture(tempDir.root)
+        tailedFile.use {
+
+            // append a few date changes and transmissions. no callback, but initial transmission after tail will be
+            // called back with the last date.
+            tailedFile.flushLine("2016-May-13 20:32  14.078 MHz  JT9")
+            tailedFile.flushLine("2033 -15 -0.4  838 @ CQ PE1ABC EM82")
+            tailedFile.flushLine("2016-04-13 20:32  14.078 MHz  JT65")
+            tailedFile.flushLine("1600 -1 -1.4  2838 #  M0CUV G1YUN JO01")
+            assertIsEmpty()
+
+            val parser = LogFileParser(tailedFile.logFilePath)
+            logger.info("got parser")
+
+            logger.info("creating tailer")
+            val tailer = parser.tail(recordEntryProperty)
+            logger.info("created tailer")
+            tailer.use {
+                // returns immediately, calls back when new data comes in
+                assertIsEmpty()
+
+                logger.info("writing to log file")
+                // append a transmission for 20m. The initial date has been scanned for before the tail starts at the
+                // end of the file, so it will be called back to us.
+                tailedFile.flushLine("2032  -3  0.0  839 @ CQ LZ1UBO KN12")
+                synchronized(logger) {
+                    assertThat(callsigns, Matchers.contains("LZ1UBO"))
+                    assertThat(dxCallsigns, Matchers.contains("CQ"))
+                    assertThat(grids, Matchers.contains("KN12"))
+                    assertThat(utcDateTimes, Matchers.contains(
+                            UTCDateTime.fromISODateTimeString("2016-04-13T20:32")))
+                }
+
+                // next transmission
+                tailedFile.flushLine("2033 -15 -0.4  838 @ LZ1UBO WA4RG EM82")
+                synchronized(logger) {
+                    assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG"))
+                    assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO"))
+                    assertThat(grids, Matchers.contains("KN12", "EM82"))
+                    assertThat(utcDateTimes, Matchers.contains(
+                            UTCDateTime.fromISODateTimeString("2016-04-13T20:32"),
+                            UTCDateTime.fromISODateTimeString("2016-04-13T20:33")))
+                }
+
+                // append a date and frequency change. no callback, next transmissino will be.
+                tailedFile.flushLine("2016-Jun-29 20:38  10.14 MHz  JT65")
+                synchronized(logger) {
+                    assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG"))
+                    assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO"))
+                    assertThat(grids, Matchers.contains("KN12", "EM82"))
+                    assertThat(utcDateTimes, Matchers.contains(
+                            UTCDateTime.fromISODateTimeString("2016-04-13T20:32"),
+                            UTCDateTime.fromISODateTimeString("2016-04-13T20:33")))
+                }
+
+                // next transmission on new band
+                tailedFile.flushLine("1040 -15 -0.4  838 @ G3XMR K1DDA LM82")
+                synchronized(logger) {
+                    assertThat(callsigns, Matchers.contains("LZ1UBO", "WA4RG", "K1DDA"))
+                    assertThat(dxCallsigns, Matchers.contains("CQ", "LZ1UBO", "G3XMR"))
+                    assertThat(grids, Matchers.contains("KN12", "EM82", "LM82"))
+                    assertThat(utcDateTimes, Matchers.contains(
+                            UTCDateTime.fromISODateTimeString("2016-04-13T20:32"),
+                            UTCDateTime.fromISODateTimeString("2016-04-13T20:33"),
+                            UTCDateTime.fromISODateTimeString("2016-06-29T10:40")))
+                }
+            }
+        }
+        logger.info("end of test")
+        // wait to see if the thread stops
+        ThreadUtils.waitNoInterruption(500)
     }
 
     @Test

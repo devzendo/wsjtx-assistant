@@ -49,6 +49,12 @@ class UTCDateTime(value: ZonedDateTime) : RepresentationType<ZonedDateTime>(valu
             throw IllegalArgumentException(value.toString() + " does not have the UTC zone")
         }
     }
+    companion object {
+        // iso in the form YYYY-MM-DDTHH:MM
+        fun fromISODateTimeString(iso: String): UTCDateTime =
+            UTCDateTime(ZonedDateTime.of(LocalDateTime.parse(iso, DateTimeFormatter.ISO_LOCAL_DATE_TIME), ZoneId.of("UTC")))
+
+    }
 }
 data class LogEntry(val utcDateTime: UTCDateTime, val power: Power, val offset: Offset, val mode: Mode,
                     val callsign: Callsign, val dxCallsign: Callsign, val grid: Grid)
@@ -197,7 +203,7 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
 
     fun file(): Path = logFile
     fun parseForBand(band: Band, callback: (logEntry: LogEntry) -> Unit) {
-        val reader = LogReader()
+        val reader = LogReader(Optional.empty())
         Files.lines(file()).forEach {
             reader.processLine(Optional.of(band), callback, it!!)
         }
@@ -205,17 +211,18 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
 
     data class DateBandChange(val utcDate: LocalDate, val band: Band)
 
-    private class LogReader() {
+    private class LogReader(startingDate: Optional<LocalDate>) {
+        // TODO secondary constructor that takes a LocalDate to initialise currentDate with
         val logger = LoggerFactory.getLogger(LogReader::class.java)
         val utc = ZoneId.of("UTC")
         var currentBand: Band? = null
-        var currentDate: LocalDate? = null
+        var currentDate: Optional<LocalDate> = startingDate
 
         fun processLine(band: Optional<Band>, callback: (logEntry: LogEntry) -> Unit, line: String) {
             logger.debug("Line [{}]", line)
             parseDateBandChange(line).ifPresent({
                 currentBand = it.band
-                currentDate = it.utcDate
+                currentDate = Optional.of(it.utcDate)
             })
             // Time/Power/Freq offset/Mode/Call/Square can be extracted from records like these:
             // 0000  -9  1.5 1259 # CQ TI4DJ EK70
@@ -244,9 +251,9 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
                 val cgrid = groups[7]!!.value
                 // callsigns must have at least one digit.
                 if (ccallsign.contains("\\d".toRegex())) {
-                    if (currentDate != null && (!band.isPresent || (band.isPresent && band.get() == currentBand))) {
+                    if (currentDate.isPresent && (!band.isPresent || (band.isPresent && band.get() == currentBand))) {
                         val entryLocalTime = LocalTime.parse(ctime, TIME_FORMATTER)!!
-                        val dateTime = UTCDateTime(ZonedDateTime.of(currentDate!!, entryLocalTime, utc))
+                        val dateTime = UTCDateTime(ZonedDateTime.of(currentDate.get(), entryLocalTime, utc))
                         val logEntry = LogEntry(dateTime,
                                 cpower.toInt(),
                                 coffset.toInt(),
@@ -273,6 +280,23 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
 
     private inner class CloseableTailer(private val band: Optional<Band>, private val callback: (logEntry: LogEntry) -> Unit): Closeable {
 
+        private val listener = OurTailerListener()
+        private val finalDate: Optional<LocalDate> = scanForFinalDate(file())
+        private val reader = LogReader(finalDate)
+        private val tailer = Tailer(file().toFile(), listener, 250, true)
+
+        init {
+            val tailThread = Thread({
+                logger.debug("Start of tailer thread")
+                tailer.run()
+                logger.debug("End of tailer thread")
+            })
+            tailThread.name = "Tailer reader"
+            tailThread.setDaemon(true)
+            tailThread.start()
+            logger.debug("Starting tailer thread")
+        }
+
         private inner class OurTailerListener: TailerListenerAdapter() {
             var tailer: Tailer? = null
 
@@ -298,19 +322,19 @@ class LogFileParser(val logFile: Path = defaultLogFile()) {
             }
         }
 
-        private val listener = OurTailerListener()
-        private val reader = LogReader()
-        private val tailer = Tailer(file().toFile(), listener, 250)
-        init {
-            val tailThread = Thread({
-                logger.debug("Start of tailer thread")
-                tailer.run()
-                logger.debug("End of tailer thread")
-            })
-            tailThread.name = "Tailer reader"
-            tailThread.setDaemon(true)
-            tailThread.start()
-            logger.debug("Starting tailer thread")
+        private fun scanForFinalDate(file: Path): Optional<LocalDate> {
+            // bit inefficient, scanning twice, but easier to code
+            var finalDate: Optional<LocalDate> = Optional.empty()
+            Files.lines(file).forEach {
+                val maybeDateBandChange = LogFileParser.parseDateBandChange(it!!)
+                maybeDateBandChange.ifPresent { finalDate = Optional.of(it.utcDate) }
+            }
+            if (finalDate.isPresent) {
+                logger.info("Final date in tailed file is " + finalDate.get())
+            } else {
+                logger.info("No final date in tailed file")
+            }
+            return finalDate;
         }
 
         override fun close() {
