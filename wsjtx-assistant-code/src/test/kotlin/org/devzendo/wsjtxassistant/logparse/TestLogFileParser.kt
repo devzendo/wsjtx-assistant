@@ -121,7 +121,6 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
     fun specificExistingFileCanBeParsed() {
         val parser = LogFileParser(TEST_FILE)
         val file = parser.file()
-        assertThat(file, not(equalTo(defaultLogFile())))
 
         // can't just say ::recordEntry here. Have to wrap it in a block.
         // or use the appalling recordEntryProperty, which has to have its type signature spelled out. ugh.
