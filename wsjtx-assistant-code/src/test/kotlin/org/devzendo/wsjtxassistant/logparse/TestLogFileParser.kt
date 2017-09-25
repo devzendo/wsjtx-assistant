@@ -56,7 +56,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
     val tempDir = TemporaryFolder()
 
     @Test
-    fun defaultPathContainsAFile() {
+    fun defaultPathContainsAFile() { // NEEDS ALL.TXT
         val defaultLogFile = defaultLogFile()
         assertThat(defaultLogFile, notNullValue())
         assertThat(exists(defaultLogFile), equalTo(true))
@@ -64,7 +64,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
     }
 
     @Test
-    fun defaultConstructorScansDefaultPathIfNotGivenAPath() {
+    fun defaultConstructorScansDefaultPathIfNotGivenAPath() { // NEEDS ALL.TXT
         val parser = LogFileParser()
         val file = parser.file()
         assertThat(file, equalTo(defaultLogFile()))
@@ -151,7 +151,6 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
             logFile.deleteOnExit()
             logger.info("log file is " + logFile.absolutePath)
             assertThat(logFile.createNewFile(), equalTo(true))
-            assertThat(logFile.toPath(), not(equalTo(defaultLogFile())))
             return logFile
         }
 
@@ -170,6 +169,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
     @Test
     fun specificExistingFileCanBeTailedForAGivenBand() {
         val tailedFile = TailedFileFixture(tempDir.root)
+
         tailedFile.use {
             val parser = LogFileParser(tailedFile.logFilePath)
             logger.info("got parser")
@@ -240,6 +240,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
     @Test
     fun specificExistingFileCanBeTailedForAnyBand() {
         val tailedFile = TailedFileFixture(tempDir.root)
+
         tailedFile.use {
             val parser = LogFileParser(tailedFile.logFilePath)
             logger.info("got parser")
@@ -310,6 +311,7 @@ class TestLogFileParser : ConsoleLoggingUnittestCase() {
     @Test
     fun lastDateChangeIsUsedForIncomingTransmissionsWhenTailing() {
         val tailedFile = TailedFileFixture(tempDir.root)
+
         tailedFile.use {
 
             // append a few date changes and transmissions. no callback, but initial transmission after tail will be
