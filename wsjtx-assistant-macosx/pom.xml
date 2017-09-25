@@ -50,6 +50,7 @@
                     <applicationName>${appName}</applicationName>
                     <mainClassName>org.devzendo.wsjtxassistant.main.MainKt</mainClassName>
                     <iconsFileName>WSJTXAssistant.icns</iconsFileName>
+                    <stubType>Universal</stubType>
                     <!--
                       I don't have an assigned creator code
                       <bundleSignature>BM</bundleSignature>
@@ -84,8 +85,8 @@
                                 <!-- Quaqua is depended on in the macosx project -->
                                 <artifactItem>
                                     <groupId>org.devzendo</groupId>
-                                    <artifactId>LibQuaqua</artifactId>
-                                    <version>7.3.4</version>
+                                    <artifactId>libquaqua</artifactId>
+                                    <version>9.1</version>
                                     <type>zip</type>
                                     <overWrite>true</overWrite>
                                     <includes>*</includes>
@@ -111,9 +112,9 @@
         </dependency>
         <dependency>
             <groupId>org.devzendo</groupId>
-            <artifactId>Quaqua</artifactId>
-            <version>7.3.4</version>
-            <!--  started with 5.2.1, 6.5 -->
+            <artifactId>quaqua</artifactId>
+            <version>9.1</version>
+            <!--  started with 5.2.1, 6.5, 7.3.4 -->
         </dependency>
     </dependencies>
 </project>
